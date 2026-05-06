@@ -1,0 +1,47 @@
+[package]
+name = "zz-drop"
+version = "0.0.1"
+edition = "2024"
+license = "TBD"
+description = "CLI and local agent for zz-drop"
+repository = "https://github.com/zz-drop/zz-drop"
+publish = false
+
+[features]
+# v1 ships local-only. Anything that talks to `zz-drop.net`
+# (account login/signup, alias create/list/delete, container
+# push/pull) is gated behind this flag. Enabling it adds the
+# remote surface; the default build has no network code, no
+# DNS resolution, no `zz-drop.net` strings reachable at runtime.
+# Graduates default-on in v2.
+default = []
+remote = []
+
+[dependencies]
+zz-drop-core = { path = "../zz-drop-core" }
+rustix = { version = "1", features = ["process", "net"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+rpassword = "7"
+subtle = "2"
+owo-colors = "4"
+thiserror = "2"
+tar = "0.4"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+nix = { version = "0.31", features = ["socket"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+# Size-tuned profile for shipping a release. Smaller binary at the
+# cost of slower compile (~3× the default release). Use it from the
+# release pipeline; day-to-day work stays on `cargo build --release`.
+#
+#   cargo build --profile dist --bin zz-drop
+[profile.dist]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
