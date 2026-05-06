@@ -1,0 +1,51 @@
+[package]
+name = "zz-drop-tui"
+version = "0.0.1"
+edition = "2024"
+license = "TBD"
+description = "Ratatui-based setup and configuration UI for zz-drop"
+repository = "https://github.com/zz-drop/zz-drop-tui"
+publish = false
+
+[[bin]]
+name = "zz-tui"
+path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+# v1 ships local-only. Anything that talks to `zz-drop.net`
+# (account login/signup, push/pull container, alias picker UI)
+# is gated behind this flag. Default build has no API client
+# compiled in and no remote menu items in the welcome screen.
+# Graduates default-on in v2.
+default = []
+remote = []
+
+[dependencies]
+ratatui = "0.30"
+zz-drop-core = { path = "../zz-drop-core" }
+url = "2"
+qrcode = "0.14"
+arboard = "3"
+open = "5"
+image = { version = "0.25", default-features = false, features = ["png"] }
+ratatui-image = { version = "10", default-features = false, features = ["crossterm", "image-defaults"] }
+zxcvbn = "3"
+directories = "6"
+getrandom = "0.2"
+rustix = { version = "1", features = ["process"] }
+
+# Size-tuned profile for shipping a release. Smaller binary at the
+# cost of slower compile (~3× the default release). Use it from the
+# release pipeline; day-to-day work stays on `cargo build --release`.
+#
+#   cargo build --profile dist --bin zz-tui
+[profile.dist]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
