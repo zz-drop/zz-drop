@@ -1,0 +1,69 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
+  pull_request:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout zz-drop
+        uses: actions/checkout@v4
+        with:
+          path: zz-drop
+
+      # zz-drop and zz-drop-tui depend on zz-drop-core via
+      # `path = "../zz-drop-core"` — the runner needs them as
+      # siblings under the same parent directory.
+      - name: Checkout zz-drop-core sibling
+        uses: actions/checkout@v4
+        with:
+          repository: Gibbio/zz-drop-core
+          path: zz-drop-core
+
+      - name: Checkout zz-drop-tui sibling
+        uses: actions/checkout@v4
+        with:
+          repository: Gibbio/zz-drop-tui
+          path: zz-drop-tui
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and target dirs
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            zz-drop
+            zz-drop-tui
+
+      - name: Linux build deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev
+
+      - name: Build zz-drop (release)
+        working-directory: zz-drop
+        run: cargo build --release
+
+      - name: Test zz-drop (dev profile)
+        working-directory: zz-drop
+        run: cargo test
+
+      - name: Build zz-drop-tui (release)
+        working-directory: zz-drop-tui
+        run: cargo build --release
+
+      - name: Test zz-drop-tui (dev profile)
+        working-directory: zz-drop-tui
+        run: cargo test

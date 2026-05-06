@@ -1,5 +1,7 @@
 # zz-drop
 
+[![build](https://github.com/Gibbio/zz-drop/actions/workflows/build.yml/badge.svg)](https://github.com/Gibbio/zz-drop/actions/workflows/build.yml)
+
 Minimalist CLI to put files into — and get files from — a configured
 safe cloud destination.
 
