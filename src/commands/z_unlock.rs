@@ -33,9 +33,10 @@ use zz_drop_core::{ProfileCryptoError, decrypt_set};
 use crate::agent::{AGENT_MODE_ENV, AgentClient, ClientError};
 use crate::cli::ContainerSource;
 use crate::commands::{
-    EXIT_AGENT_UNREACHABLE, EXIT_DECRYPT_FAILED, EXIT_NOT_IMPLEMENTED, EXIT_OK,
-    EXIT_PROFILE_MISSING, EXIT_USAGE,
+    EXIT_AGENT_UNREACHABLE, EXIT_DECRYPT_FAILED, EXIT_OK, EXIT_PROFILE_MISSING, EXIT_USAGE,
 };
+#[cfg(not(feature = "remote"))]
+use crate::commands::EXIT_NOT_IMPLEMENTED;
 use crate::output;
 use crate::picker::{PickError, pick_alias};
 use zz_drop_core::sidecars;
@@ -53,15 +54,156 @@ pub fn run(paths: &Paths, which: Option<ContainerSource>) -> i32 {
 
     match resolved {
         ContainerSource::Local => unlock_local(paths),
-        ContainerSource::Remote => {
-            // The remote container flow lives behind the `remote`
-            // feature flag (TASK 46). The default v1 binary does not
-            // ship it; we surface a clear message rather than
-            // silently failing.
+        ContainerSource::Remote => unlock_remote(paths),
+    }
+}
+
+#[cfg(not(feature = "remote"))]
+fn unlock_remote(_paths: &Paths) -> i32 {
+    // The remote container flow lives behind the `remote` feature
+    // flag (TASK 46). The default v1 binary does not ship it; we
+    // surface a clear message rather than silently failing.
+    output::err_line(
+        "remote container not available in this build (v1 ships local-only; rebuild with `--features remote`)",
+    );
+    EXIT_NOT_IMPLEMENTED
+}
+
+#[cfg(feature = "remote")]
+fn unlock_remote(paths: &Paths) -> i32 {
+    // Mirror image of `unlock_local` against the remote container
+    // file + sidecar. Kept as a near-copy rather than a refactor so
+    // the local-only default build doesn't carry remote-specific
+    // branches it can never execute. A unifying helper can land
+    // when both flows are stable enough to share.
+    if !paths.profiles_remote_file.exists() {
+        output::err_line(&format!(
+            "no remote container at {}; run `zz z <email>` to fetch one",
+            paths.profiles_remote_file.display()
+        ));
+        return EXIT_PROFILE_MISSING;
+    }
+
+    let envelope = match std::fs::read_to_string(&paths.profiles_remote_file) {
+        Ok(s) => s,
+        Err(e) => {
+            output::err_line(&format!("could not read remote container: {e}"));
+            return EXIT_PROFILE_MISSING;
+        }
+    };
+
+    let label = paths
+        .profiles_remote_file
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("profiles-remote.zz")
+        .to_string();
+    let passphrase = match prompt_passphrase(&label) {
+        Ok(p) => p,
+        Err(e) => {
+            output::err_line(&format!("could not read passphrase: {e}"));
+            return EXIT_USAGE;
+        }
+    };
+
+    let (profile_set, kek) = match decrypt_set(&envelope, &passphrase) {
+        Ok(pair) => pair,
+        Err(ProfileCryptoError::Aead) => {
+            output::err_line("decryption failed (wrong passphrase or corrupted container)");
+            return EXIT_DECRYPT_FAILED;
+        }
+        Err(ProfileCryptoError::LegacyFormat) => {
             output::err_line(
-                "remote container not available in this build (v1 ships local-only)",
+                "legacy single-profile blob detected (no migration in dev): run `zz w` and re-set up",
             );
-            EXIT_NOT_IMPLEMENTED
+            return EXIT_DECRYPT_FAILED;
+        }
+        Err(e) => {
+            output::err_line(&format!("decryption failed: {e}"));
+            return EXIT_DECRYPT_FAILED;
+        }
+    };
+
+    if profile_set.is_empty() {
+        output::err_line("remote profile container is empty");
+        return EXIT_DECRYPT_FAILED;
+    }
+
+    let cached = sidecars::read_remote_default(&paths.last_default_remote_file).ok();
+    let cached_alias = cached
+        .as_ref()
+        .and_then(|d| d.alias.as_deref())
+        .filter(|a| profile_set.contains_alias(a));
+    let aliases: Vec<&str> = profile_set.aliases();
+
+    let active_alias = match pick_alias(&aliases, cached_alias) {
+        Ok(a) => a,
+        Err(PickError::EmptyList) => {
+            output::err_line("remote profile container is empty");
+            return EXIT_DECRYPT_FAILED;
+        }
+        Err(PickError::NotInteractive) => {
+            output::err_line(
+                "no cached default and stdin is not a terminal; run `zz z remote` interactively first",
+            );
+            return EXIT_USAGE;
+        }
+        Err(PickError::InvalidIndex) => {
+            output::err_line("invalid selection");
+            return EXIT_USAGE;
+        }
+        Err(PickError::Stdin) => {
+            output::err_line("could not read selection");
+            return EXIT_USAGE;
+        }
+    };
+
+    let active_profile = profile_set
+        .find_by_alias(&active_alias)
+        .expect("alias was just chosen from the set");
+    let target = output::profile_target(active_profile);
+
+    let _ = crate::agent::lock::check_for_stale_agent(
+        &paths.runtime_dir,
+        &paths.agent_socket,
+        &paths.token_file,
+    );
+
+    if !paths.agent_socket.exists() {
+        if let Err(e) = spawn_agent() {
+            output::err_line(&format!("could not start agent: {e}"));
+            return EXIT_AGENT_UNREACHABLE;
+        }
+        if !wait_for_socket(&paths.agent_socket, Duration::from_secs(2)) {
+            output::err_line("agent did not come up in time");
+            return EXIT_AGENT_UNREACHABLE;
+        }
+    }
+
+    let mut client = match AgentClient::connect(&paths.agent_socket, &paths.token_file) {
+        Ok(c) => c,
+        Err(e) => {
+            output::err_line(&format!("could not connect to agent: {e}"));
+            return EXIT_AGENT_UNREACHABLE;
+        }
+    };
+
+    match client.unlock(profile_set, &kek, &active_alias, Some(UNLOCK_TTL_SECS)) {
+        Ok(AgentResponse::Unlocked) => {
+            output::line(&format!("unlocked · {active_alias} · {target}"));
+            EXIT_OK
+        }
+        Ok(other) => {
+            output::err_line(&format!("unexpected agent response: {other:?}"));
+            EXIT_AGENT_UNREACHABLE
+        }
+        Err(ClientError::HandshakeFailed) => {
+            output::err_line("agent handshake failed (token mismatch)");
+            EXIT_AGENT_UNREACHABLE
+        }
+        Err(e) => {
+            output::err_line(&format!("agent error: {e}"));
+            EXIT_AGENT_UNREACHABLE
         }
     }
 }

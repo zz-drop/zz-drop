@@ -250,13 +250,16 @@ fn z_local_and_remote_pick_explicitly() {
 }
 
 #[test]
-fn z_with_anything_else_is_error() {
+fn z_extra_arguments_are_an_error() {
+    // 1-arg forms now route either to ContainerUnlock (local/remote)
+    // or to RemoteUnlock (email/alias). What's still rejected is
+    // 2+ arguments — see TASK 20 (CLI client).
     assert_eq!(
-        parse(&["z", "casa-nc"]),
+        parse(&["z", "local", "extra"]),
         Err(ParseError::UnexpectedArgument { command: "z" })
     );
     assert_eq!(
-        parse(&["z", "user@example.org"]),
+        parse(&["z", "casa-nc", "extra"]),
         Err(ParseError::UnexpectedArgument { command: "z" })
     );
 }
@@ -346,7 +349,7 @@ fn parse_error_display_messages_are_helpful() {
     let s = format!("{err}");
     assert!(s.contains("`s`") && s.contains("requires"), "got `{s}`");
 
-    let err = parse(&["z", "junk"]).unwrap_err();
+    let err = parse(&["z", "local", "junk"]).unwrap_err();
     let s = format!("{err}");
     assert!(s.contains("`z`") && s.contains("no arguments"), "got `{s}`");
 }

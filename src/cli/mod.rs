@@ -78,6 +78,13 @@ pub enum Command {
     /// None` means "use the cached default if any, otherwise prompt
     /// local/remote".
     ContainerUnlock { which: Option<ContainerSource> },
+    /// `zz z <email>` / `zz z <alias>` — pull the encrypted profile
+    /// container from the configured zz-drop server, persist it as
+    /// `profiles-remote.zz`, then run the same unlock dance as
+    /// `zz z remote`. Gated behind the `remote` Cargo feature
+    /// (default-off in v1); the parser still accepts the form so
+    /// completion / help stays consistent across builds.
+    RemoteUnlock { selector: RemoteSelector },
     Lock,
     Wipe,
     OpenTui,
@@ -89,4 +96,14 @@ pub enum Command {
 pub enum ContainerSource {
     Local,
     Remote,
+}
+
+/// First positional of `zz z` when it doesn't match `local`/`remote`.
+/// We discriminate by the presence of `@`: contains one → email,
+/// otherwise → alias. The parser does the split; the executor
+/// decides what to do with each.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RemoteSelector {
+    Email(String),
+    Alias(String),
 }

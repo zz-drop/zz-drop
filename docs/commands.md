@@ -79,6 +79,16 @@ are not descended into, symlinks are never followed.
   the remote.
 - `zz d <name>` — `<name>` may include `/`; the file is saved
   with its basename in the current directory.
+- `zz z <email>` / `zz z <alias>` — pull the encrypted profile
+  container from the configured zz-drop server, persist it as
+  `profiles-remote.zz`, then chain into the same unlock dance as
+  `zz z remote`. The form with `@` in it is treated as an account
+  email; otherwise it is treated as a stored alias (which in v1
+  requires a saved session — not yet supported, surfaced as a
+  clear error). Server URL is read from `$ZZ_SERVER_URL`. Gated
+  behind the `remote` Cargo feature (default-off in v1) — the
+  parser accepts the form in every build, the executor surfaces
+  "remote not enabled" if the feature is off.
 - `zz d <pattern>` — when `<pattern>` contains `*` or `?`, the
   pattern is expanded server-side: zz lists the parent directory
   of the pattern (root if the pattern has no `/`), matches each

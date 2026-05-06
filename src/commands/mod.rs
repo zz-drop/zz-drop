@@ -7,6 +7,7 @@ pub mod remote_fs;
 pub mod upload;
 pub mod w_wipe;
 pub mod walk;
+pub mod z_remote;
 pub mod z_unlock;
 
 use std::path::{Path, PathBuf};
@@ -133,6 +134,7 @@ pub fn dispatch(cmd: &Command) -> i32 {
             })
         }
         Command::ContainerUnlock { which } => with_paths(|p| z_unlock::run(p, *which)),
+        Command::RemoteUnlock { selector } => with_paths(|p| z_remote::run(p, selector)),
         Command::Lock => with_paths(q_lock::run),
         Command::Wipe => with_paths(w_wipe::run),
         Command::OpenTui => open_tui::run(),

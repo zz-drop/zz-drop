@@ -1,7 +1,7 @@
 use std::fmt;
 use std::path::PathBuf;
 
-use super::{Command, ContainerSource};
+use super::{Command, ContainerSource, RemoteSelector};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseError {
@@ -264,6 +264,16 @@ where
                 }),
                 "remote" => Ok(Command::ContainerUnlock {
                     which: Some(ContainerSource::Remote),
+                }),
+                // Anything else with one `@` is interpreted as an
+                // account email; otherwise as a stored alias. The
+                // executor decides whether the runtime supports it
+                // (gated behind the `remote` Cargo feature).
+                other if other.contains('@') => Ok(Command::RemoteUnlock {
+                    selector: RemoteSelector::Email(other.to_string()),
+                }),
+                other if !other.is_empty() => Ok(Command::RemoteUnlock {
+                    selector: RemoteSelector::Alias(other.to_string()),
                 }),
                 _ => Err(ParseError::UnexpectedArgument { command: "z" }),
             },
@@ -727,14 +737,21 @@ mod tests {
     }
 
     #[test]
-    fn z_with_unknown_arg_is_error() {
-        assert_eq!(
-            parse(&["z", "personal"]),
-            Err(ParseError::UnexpectedArgument { command: "z" }),
-        );
+    fn z_with_email_or_alias_yields_remote_unlock() {
+        // Anything containing `@` is parsed as an account email;
+        // anything else as a stored alias. Executor (gated behind
+        // the `remote` feature) decides what to do at runtime.
         assert_eq!(
             parse(&["z", "alice@example.org"]),
-            Err(ParseError::UnexpectedArgument { command: "z" }),
+            Ok(Command::RemoteUnlock {
+                selector: RemoteSelector::Email("alice@example.org".into()),
+            }),
+        );
+        assert_eq!(
+            parse(&["z", "personal"]),
+            Ok(Command::RemoteUnlock {
+                selector: RemoteSelector::Alias("personal".into()),
+            }),
         );
     }
 
