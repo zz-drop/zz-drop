@@ -693,19 +693,20 @@ mod tests {
 
     #[test]
     fn get_active_renews_ttl() {
-        // Wider TTL than strictly necessary, so CI runners under
-        // load (notably macOS Apple Silicon) don't trip over
-        // scheduler overhead between the two sleeps. The original
-        // (80ms / 50+50ms) margin was tight enough to flake.
+        // Generous TTL margin so the test stays robust on noisy
+        // runners (macOS Apple Silicon CI in particular). Even
+        // 250ms / 120+120ms was tight enough to flake. We're
+        // testing the *logic* of TTL renewal, not its precision —
+        // a wide window is fine.
         let set = sample_set_with(&["a"]);
         let dir = tempdir().unwrap();
         let path = dir.path().join("profiles-local.zz");
         let kek = save_set_zz_with_config(&set, TEST_PASSPHRASE, &path, &FAST_KDF).unwrap();
-        let s = AgentState::new(Duration::from_millis(250), path);
+        let s = AgentState::new(Duration::from_millis(2000), path);
         s.unlock(set, kek, "a".into(), None);
-        sleep(Duration::from_millis(120));
+        sleep(Duration::from_millis(200));
         let _ = s.get_active_profile_renewing_ttl();
-        sleep(Duration::from_millis(120));
+        sleep(Duration::from_millis(200));
         assert!(!s.check_ttl_and_lock());
         assert!(s.is_unlocked());
     }

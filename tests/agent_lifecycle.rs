@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use tempfile::tempdir;
 
-use zz_drop::agent::{AgentClient, ClientError, ServerConfig};
+use zz_drop::agent::{AgentClient, ServerConfig};
 use zz_drop_core::agent_proto::{AgentRequest, AgentResponse};
 use zz_drop_core::config::{PathOverrides, Paths, discover_paths};
 use zz_drop_core::profile::format::save_set_zz_with_config;
