@@ -12,7 +12,21 @@ use std::path::Path;
 use zz_drop::commands::open_tui::{EXIT_TUI_NOT_FOUND, run_with_env};
 
 fn write_executable(path: &Path, body: &str) {
-    fs::write(path, body).expect("write fake binary");
+    // Use OpenOptions + sync_all so Linux's exec() doesn't race
+    // with a still-pending write and return ETXTBSY ("Text file
+    // busy"). On macOS the plain `fs::write` already closes the
+    // fd synchronously enough; on the GitHub-hosted Linux runner
+    // the test was flaking without this fsync.
+    use std::io::Write;
+    let mut f = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(path)
+        .expect("open fake binary");
+    f.write_all(body.as_bytes()).expect("write fake binary");
+    f.sync_all().expect("sync_all");
+    drop(f);
     let mut perms = fs::metadata(path).unwrap().permissions();
     perms.set_mode(0o755);
     fs::set_permissions(path, perms).expect("chmod +x");
