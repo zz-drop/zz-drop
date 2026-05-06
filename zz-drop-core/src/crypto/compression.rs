@@ -1,0 +1,175 @@
+//! zstd compression / decompression for the `x` modifier.
+//!
+//! Only one algorithm is supported: zstd via the `zstd` crate
+//! (libzstd binding). Default compression level is `3`, the
+//! upstream zstd default — balanced ratio/speed and the value
+//! the v1 grammar locks in.
+//!
+//! Decompression is auto-detect: callers run [`is_zstd_magic`] on
+//! the first four bytes of a remote blob and dispatch to
+//! [`decompress`] when the marker matches. Plaintext blobs flow
+//! through unchanged.
+//!
+//! Files smaller than [`COMPRESS_SKIP_THRESHOLD_BYTES`] should
+//! skip the compress step on the upload side: zstd's frame
+//! header (~17 bytes) makes a tiny payload bigger, not smaller.
+
+use std::io;
+
+/// zstd v1 magic header at offset 0: `28 B5 2F FD`. Stable
+/// across the format; clients use it to dispatch download
+/// pipelines without metadata exchange.
+pub const ZSTD_MAGIC: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
+
+/// Tar `ustar\0` magic at offset 257 inside an archive's first
+/// 512-byte header block. After zstd-decoding a `.tar.zst`
+/// payload the caller checks this to decide whether to feed
+/// the bytes to a tar extractor.
+pub const TAR_USTAR_MAGIC: &[u8; 6] = b"ustar\0";
+
+/// File-size cutoff below which the `x` modifier skips zstd on
+/// upload. Matches the v1 design freeze (4 KiB).
+pub const COMPRESS_SKIP_THRESHOLD_BYTES: usize = 4 * 1024;
+
+/// Default zstd compression level for the `x` modifier in v1.
+pub const DEFAULT_COMPRESSION_LEVEL: i32 = 3;
+
+/// Returns `true` when `bytes` starts with the zstd v1 magic
+/// number (`28 B5 2F FD`). Plaintext payloads return `false`.
+pub fn is_zstd_magic(bytes: &[u8]) -> bool {
+    bytes.len() >= ZSTD_MAGIC.len() && bytes[..ZSTD_MAGIC.len()] == ZSTD_MAGIC
+}
+
+/// Returns `true` when `bytes` looks like the first 512 bytes of
+/// a tar archive (`ustar\0` at offset 257). Used to chain
+/// "decompress → extract" inside `zz dx <archive>.tar.zst`.
+pub fn is_tar_ustar(bytes: &[u8]) -> bool {
+    const OFFSET: usize = 257;
+    bytes.len() >= OFFSET + TAR_USTAR_MAGIC.len()
+        && &bytes[OFFSET..OFFSET + TAR_USTAR_MAGIC.len()] == TAR_USTAR_MAGIC
+}
+
+/// Compress `plaintext` into a `Vec<u8>` using zstd at the
+/// given level. Level `3` is the project default; the wider
+/// range supported by v1 callers is `1..=9`.
+pub fn compress(plaintext: &[u8], level: i32) -> io::Result<Vec<u8>> {
+    zstd::stream::encode_all(plaintext, level)
+}
+
+/// Decompress a zstd-encoded blob. Returns the decoded bytes.
+/// Errors propagate from the underlying decoder (truncated
+/// frame, unsupported version, etc.).
+pub fn decompress(ciphertext: &[u8]) -> io::Result<Vec<u8>> {
+    zstd::stream::decode_all(ciphertext)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn magic_match_only_on_full_prefix() {
+        assert!(is_zstd_magic(&[0x28, 0xB5, 0x2F, 0xFD]));
+        assert!(is_zstd_magic(&[0x28, 0xB5, 0x2F, 0xFD, 0x00]));
+        // Wrong byte at any position = no match.
+        assert!(!is_zstd_magic(&[0x28, 0xB5, 0x2F, 0xFE]));
+        assert!(!is_zstd_magic(&[0x29, 0xB5, 0x2F, 0xFD]));
+        // Too short = no match (rejects partial reads).
+        assert!(!is_zstd_magic(&[0x28, 0xB5, 0x2F]));
+        assert!(!is_zstd_magic(&[]));
+    }
+
+    #[test]
+    fn tar_ustar_detected_at_offset_257() {
+        // Build the smallest plausible buffer: 257 zero bytes,
+        // the magic, padding to a 512-block boundary.
+        let mut buf = vec![0u8; 257];
+        buf.extend_from_slice(TAR_USTAR_MAGIC);
+        buf.resize(512, 0);
+        assert!(is_tar_ustar(&buf));
+
+        // Magic at the wrong offset = no detection.
+        let mut shifted = vec![0u8; 100];
+        shifted.extend_from_slice(TAR_USTAR_MAGIC);
+        shifted.resize(512, 0);
+        assert!(!is_tar_ustar(&shifted));
+
+        // Truncated buffer: even if the magic appears in the
+        // bytes we hold, an undersized header doesn't qualify.
+        assert!(!is_tar_ustar(&buf[..200]));
+    }
+
+    #[test]
+    fn round_trip_preserves_bytes_at_default_level() {
+        let plaintext = b"hello, zz-drop \xE2\x9C\x93 \x00 mixed bytes \xFF";
+        let compressed = compress(plaintext, DEFAULT_COMPRESSION_LEVEL).unwrap();
+        // The output must start with the zstd magic.
+        assert!(is_zstd_magic(&compressed));
+        // And decompress to the exact same bytes.
+        let decoded = decompress(&compressed).unwrap();
+        assert_eq!(decoded, plaintext);
+    }
+
+    #[test]
+    fn round_trip_works_across_supported_levels() {
+        let plaintext = b"the quick brown fox ".repeat(64);
+        for level in [1, 3, 9] {
+            let compressed = compress(&plaintext, level).unwrap();
+            let decoded = decompress(&compressed).unwrap();
+            assert_eq!(decoded, plaintext, "level {level} must round-trip");
+        }
+    }
+
+    #[test]
+    fn tiny_payload_grows_after_compress_so_skip_makes_sense() {
+        // The skip threshold exists exactly because zstd's frame
+        // header dominates on tiny inputs. This locks the
+        // assumption: a single byte goes from 1 to ~14 bytes.
+        let plaintext = b"x";
+        let compressed = compress(plaintext, DEFAULT_COMPRESSION_LEVEL).unwrap();
+        assert!(
+            compressed.len() > plaintext.len(),
+            "tiny payload must grow when zstd-encoded ({} bytes after compress)",
+            compressed.len()
+        );
+    }
+
+    #[test]
+    fn highly_compressible_input_shrinks() {
+        // 64 KiB of zeros is ~99 % compressible; this is the
+        // sanity case for the algorithm.
+        let plaintext = vec![0u8; 64 * 1024];
+        let compressed = compress(&plaintext, DEFAULT_COMPRESSION_LEVEL).unwrap();
+        assert!(
+            compressed.len() < plaintext.len() / 10,
+            "expected zeros to compress > 10×, got {} → {}",
+            plaintext.len(),
+            compressed.len(),
+        );
+        let decoded = decompress(&compressed).unwrap();
+        assert_eq!(decoded, plaintext);
+    }
+
+    #[test]
+    fn decompress_rejects_truncated_frame() {
+        let plaintext = b"ABCD".repeat(64);
+        let compressed = compress(&plaintext, DEFAULT_COMPRESSION_LEVEL).unwrap();
+        // Lop off the last byte; the AEAD-equivalent check for
+        // zstd is the trailing checksum / frame-end marker.
+        let truncated = &compressed[..compressed.len() - 1];
+        assert!(decompress(truncated).is_err());
+    }
+
+    #[test]
+    fn skip_threshold_is_4_kib() {
+        // The constant is part of the v1 public-facing contract
+        // (mentioned in the README and the file-encryption
+        // spec). Lock it so a future refactor doesn't drift.
+        assert_eq!(COMPRESS_SKIP_THRESHOLD_BYTES, 4 * 1024);
+    }
+
+    #[test]
+    fn default_level_is_three() {
+        assert_eq!(DEFAULT_COMPRESSION_LEVEL, 3);
+    }
+}

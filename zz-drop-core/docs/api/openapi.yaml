@@ -1,0 +1,652 @@
+openapi: 3.1.0
+info:
+  title: zz-drop API
+  version: "1.0.0"
+  summary: Public API contract for zz-drop and compatible servers.
+  description: |
+    Public contract for the zz-drop HTTP API v1.
+
+    This is a stub: the schema is canonical for the v1 surface, but
+    individual server implementations may add fields they need
+    operationally as long as they remain backward-compatible.
+
+    Implementations:
+
+    - `zz-drop-server-minimal` is the public reference, not
+      production-ready.
+    - The hosted service at `https://zz-drop.net/api/v1` is the
+      production implementation.
+
+    The server stores **only** encrypted `profile.zz` blobs and account
+    metadata. It never sees decrypted profile data, the profile decrypt
+    passphrase, or any provider credentials or metadata.
+
+servers:
+  - url: https://zz-drop.net/api/v1
+    description: Hosted service
+  - url: http://localhost:8080/api/v1
+    description: Local development / minimal reference server
+
+tags:
+  - name: discovery
+  - name: auth
+  - name: profiles
+  - name: account
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  /info:
+    get:
+      tags: [discovery]
+      summary: Discovery endpoint
+      description: Returns service information and supported API version.
+      security: []
+      responses:
+        "200":
+          description: Service info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Info"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Register an account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Account created
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Login (step 1)
+      description: |
+        With TOTP off, returns a `LoginResponse` carrying the session
+        token. With TOTP on (account opted in), returns a
+        `LoginTotpChallenge` instead; the client follows up with
+        `POST /auth/totp/login` to exchange the challenge + 6-digit
+        code (or recovery code) for a session.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Session token, or a TOTP challenge
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/LoginResponse"
+                  - $ref: "#/components/schemas/LoginTotpChallenge"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /auth/totp/enroll:
+    post:
+      tags: [auth]
+      summary: Start TOTP 2FA enrollment
+      description: |
+        Generates a fresh shared seed for the authenticated account,
+        encrypts it at rest, and returns the `otpauth://` URI plus 10
+        single-use recovery codes. The codes are shown **once**.
+        Enrollment is pending until `POST /auth/totp/verify` succeeds.
+      responses:
+        "200":
+          description: Enrollment payload (shown once)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TotpEnrollResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /auth/totp/verify:
+    post:
+      tags: [auth]
+      summary: Activate a pending TOTP enrollment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TotpVerifyRequest"
+      responses:
+        "204":
+          description: TOTP activated
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /auth/totp/login:
+    post:
+      tags: [auth]
+      summary: Login (step 2) — exchange a TOTP challenge for a session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TotpLoginRequest"
+      responses:
+        "200":
+          description: Session token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /auth/totp/disable:
+    post:
+      tags: [auth]
+      summary: Disable TOTP for the authenticated account
+      description: |
+        Requires the account password plus a current valid TOTP code or
+        a single recovery code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TotpDisableRequest"
+      responses:
+        "204":
+          description: TOTP disabled
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /profiles:
+    get:
+      tags: [profiles]
+      summary: List the authenticated account's profile aliases
+      responses:
+        "200":
+          description: Profile list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    post:
+      tags: [profiles]
+      summary: Create a profile alias
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProfileRequest"
+      responses:
+        "201":
+          description: Alias created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileSummary"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /profiles/{alias}/blob:
+    parameters:
+      - $ref: "#/components/parameters/AliasPath"
+    get:
+      tags: [profiles]
+      summary: Download the encrypted profile.zz blob
+      description: |
+        Returns the opaque encrypted blob. The server cannot decrypt it.
+      responses:
+        "200":
+          description: Encrypted blob
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    put:
+      tags: [profiles]
+      summary: Upload the encrypted profile.zz blob
+      description: |
+        Atomic update gated by `expected_version`. The server must reject
+        with `version_conflict` if the current blob version differs.
+      parameters:
+        - name: expected_version
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: Blob updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileSummary"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/BlobTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /profiles/{alias}:
+    parameters:
+      - $ref: "#/components/parameters/AliasPath"
+    delete:
+      tags: [profiles]
+      summary: Delete a profile alias
+      responses:
+        "200":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /account/email-preferences:
+    get:
+      tags: [account]
+      summary: Get the authenticated account's email preferences
+      responses:
+        "200":
+          description: Email preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailPreferences"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    put:
+      tags: [account]
+      summary: Update the authenticated account's email preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailPreferencesUpdate"
+      responses:
+        "200":
+          description: Updated email preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailPreferences"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Opaque session token issued by `/auth/login`.
+
+  parameters:
+    AliasPath:
+      name: alias
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Alias"
+
+  schemas:
+
+    Alias:
+      type: string
+      description: |
+        Profile alias. Globally unique, lowercase, charset `a-z0-9._-`,
+        length 4–32 characters.
+      pattern: "^[a-z0-9._-]{4,32}$"
+      minLength: 4
+      maxLength: 32
+
+    Info:
+      type: object
+      required: [api_version]
+      properties:
+        api_version:
+          type: string
+          example: "1"
+        implementation:
+          type: string
+          description: Free-form name of the server implementation.
+        notes:
+          type: string
+
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 16
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    LoginResponse:
+      type: object
+      required: [token, expires_in]
+      properties:
+        token:
+          type: string
+          description: Opaque session token.
+        expires_in:
+          type: integer
+          description: Token lifetime in seconds.
+          minimum: 0
+
+    LoginTotpChallenge:
+      type: object
+      description: |
+        Returned by `POST /auth/login` when the account has TOTP
+        enabled. The client must follow up with `POST /auth/totp/login`
+        within `expires_in` seconds.
+      required: [totp_required, challenge, expires_in]
+      properties:
+        totp_required:
+          type: boolean
+          enum: [true]
+        challenge:
+          type: string
+          description: Opaque challenge token, single use.
+        expires_in:
+          type: integer
+          minimum: 0
+
+    TotpEnrollResponse:
+      type: object
+      required: [otpauth_uri, secret_base32, recovery_codes]
+      properties:
+        otpauth_uri:
+          type: string
+          description: |
+            `otpauth://totp/...` URI with the shared seed; typically
+            rendered as a QR for the user's authenticator app.
+        secret_base32:
+          type: string
+          description: |
+            Same shared seed as `otpauth_uri`, encoded in base32 for
+            manual entry in apps that don't scan QRs.
+        recovery_codes:
+          type: array
+          description: 10 single-use recovery codes, shown once.
+          items:
+            type: string
+
+    TotpVerifyRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          description: 6 ASCII digits.
+          pattern: "^[0-9]{6}$"
+
+    TotpLoginRequest:
+      type: object
+      required: [challenge, code]
+      properties:
+        challenge:
+          type: string
+        code:
+          type: string
+          description: 6-digit TOTP code or one recovery code.
+
+    TotpDisableRequest:
+      type: object
+      required: [password, code]
+      properties:
+        password:
+          type: string
+          format: password
+        code:
+          type: string
+          description: 6-digit TOTP code or one recovery code.
+
+    ProfileSummary:
+      type: object
+      required: [alias, blob_size, blob_version, created_at, updated_at]
+      properties:
+        alias:
+          $ref: "#/components/schemas/Alias"
+        blob_size:
+          type: integer
+          minimum: 0
+          description: Size in bytes of the encrypted blob.
+        blob_version:
+          type: integer
+          minimum: 0
+          description: Monotonic version, used by `expected_version`.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProfileList:
+      type: object
+      required: [profiles]
+      properties:
+        profiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProfileSummary"
+
+    CreateProfileRequest:
+      type: object
+      required: [alias]
+      properties:
+        alias:
+          $ref: "#/components/schemas/Alias"
+
+    EmailPreferences:
+      type: object
+      description: |
+        Email preference state. `security_events` is non-disableable:
+        servers must always report `true` and reject attempts to set it
+        to `false`.
+      required: [security_events, profile_activity, product_updates]
+      properties:
+        security_events:
+          type: boolean
+          description: Required security emails. Always `true`.
+          enum: [true]
+        profile_activity:
+          type: boolean
+        product_updates:
+          type: boolean
+
+    EmailPreferencesUpdate:
+      type: object
+      properties:
+        profile_activity:
+          type: boolean
+        product_updates:
+          type: boolean
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_request
+            - unauthorized
+            - forbidden
+            - not_found
+            - version_conflict
+            - blob_too_large
+            - rate_limited
+            - server_error
+        message:
+          type: string
+          description: Human-readable, non-sensitive description.
+
+  responses:
+    InvalidRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Version conflict or alias already taken
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    BlobTooLarge:
+      description: Blob exceeds the server's size limit
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Rate limited
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServerError:
+      description: Server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

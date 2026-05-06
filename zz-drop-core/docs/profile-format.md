@@ -1,0 +1,168 @@
+# `profiles-{local,remote}.zz` format
+
+## File names
+
+- `profiles-local.zz` — encrypted container kept only on this machine
+- `profiles-remote.zz` — encrypted container cached from the
+  `zz-drop.net` API server
+
+A single file holds **N** inner profiles; daily commands operate on
+the inner profile last selected by `zz z {local,remote}`.
+
+The legacy single-profile shapes (`profile.zz`,
+`profile-{local,remote}.zz`) are recognised on read for the sole
+purpose of refusing them with `LegacyFormat`. There is no
+auto-migration.
+
+## Envelope v1
+
+JSON envelope with base64 salt/nonce/ciphertext. Same shape as before;
+only the encrypted payload changed (was `PlainProfile` v1, now
+`ProfileSet` v2).
+
+```json
+{
+  "version": 1,
+  "kdf": {
+    "name": "argon2id",
+    "memory_kib": 194560,
+    "iterations": 3,
+    "parallelism": 1,
+    "salt": "base64..."
+  },
+  "cipher": {
+    "name": "xchacha20poly1305",
+    "nonce": "base64..."
+  },
+  "payload": {
+    "format": "cbor",
+    "ciphertext": "base64..."
+  }
+}
+```
+
+## Plain payload — `ProfileSet` schema v2
+
+```cbor
+{
+  "schema_version": 2,
+  "profiles": [ <PlainProfile>, <PlainProfile>, … ]
+}
+```
+
+Each `PlainProfile` carries:
+
+- `profile_version`
+- `profile_id`
+- `alias` — operator-chosen mnemonic, used both as the human label in
+  the picker and as the persistence key in the `last-default-{local,
+  remote}` sidecars
+- `default_target`
+- one provider config (Nextcloud / Google Drive / OneDrive / Proton)
+- auth secret(s)
+- collision policy
+- agent settings
+- created/updated timestamps
+
+The `ProfileSet` does **not** carry a `default_alias` field. The
+"last selected" alias lives only in the plaintext sidecar files
+`last-default-local` (one line `<alias>\n`) and `last-default-remote`
+(two lines `<email>\n<alias>\n`); the in-memory agent caches it
+between operations within a session.
+
+### Sidecar size + charset rules
+
+- max 256 bytes
+- chmod 0600
+- alias: printable ASCII, no NUL, no `/`, no `..`, length 1–64
+- email: contains `@`, no whitespace, no control chars, length ≤ 254
+- any failure mode (missing, oversized, malformed) silently falls
+  back to the interactive picker
+
+### Capacity limits
+
+- Local container: no count limit
+- Remote container: max 5 inner profiles. Server enforces both a
+  count cap (defense-in-depth, declared by the client) and a blob
+  byte cap (crypto-safe, measured server-side). Both limits are
+  returned at login as part of `ServerPolicy`.
+
+## Crypto
+
+- Argon2id target: ~500 ms–1 s on average machine.
+- XChaCha20-Poly1305 AEAD.
+- KDF parameters stored in envelope.
+- No recovery if profile decrypt passphrase is lost.
+
+## Profile passphrase
+
+- minimum technical length: 1 character
+- recommended: 12+ characters
+- weak passphrase allowed only after strong warning
+
+## Implementation notes (zz-drop-core reference)
+
+The reference implementation lives in this crate, exposed as:
+
+```rust
+// Container API (current).
+pub fn encrypt_set(set: &ProfileSet, passphrase: &str)
+    -> Result<(String, ProfileKek), ProfileCryptoError>;
+
+pub fn encrypt_set_with_config(
+    set: &ProfileSet, passphrase: &str, config: &Argon2idConfig)
+    -> Result<(String, ProfileKek), ProfileCryptoError>;
+
+/// Re-encrypt without running Argon2id again. The agent uses this
+/// when the in-RAM container mutates (inner-profile add, OAuth
+/// refresh) so the operator does not re-prompt the passphrase.
+pub fn encrypt_set_with_kek(set: &ProfileSet, kek: &ProfileKek)
+    -> Result<String, ProfileCryptoError>;
+
+pub fn decrypt_set(envelope: &str, passphrase: &str)
+    -> Result<(ProfileSet, ProfileKek), ProfileCryptoError>;
+
+// Single-profile API (legacy, used only to recognise legacy blobs
+// and report `LegacyFormat`).
+pub fn encrypt_profile(profile: &PlainProfile, passphrase: &str)
+    -> Result<String, ProfileCryptoError>;
+pub fn decrypt_profile(profile_zz: &str, passphrase: &str)
+    -> Result<PlainProfile, ProfileCryptoError>;
+```
+
+`ProfileKek` carries the derived key, salt and Argon2id parameters
+used to derive it. The agent persists it in `Zeroizing` storage for
+the duration of the unlocked session and uses it to re-encrypt the
+container after any inner mutation.
+
+Default Argon2id parameters (`Argon2idConfig::DEFAULT`):
+
+- `memory_kib = 194_560` (≈ 190 MiB)
+- `iterations = 3`
+- `parallelism = 1`
+- output key length: 32 bytes
+
+Field sizes:
+
+- salt: 16 bytes
+- nonce: 24 bytes (XChaCha20)
+- key: 32 bytes (zeroized on drop in the reference implementation)
+
+Decrypt failure does **not** distinguish between MAC failure, wrong
+passphrase, corrupted ciphertext or wrong nonce: every such case
+returns the same error variant. This is deliberate — distinguishing
+them would enable decrypt oracle attacks against the envelope.
+
+Error variants visible to callers (`ProfileCryptoError`):
+`UnsupportedVersion`, `UnsupportedKdf`, `UnsupportedCipher`,
+`UnsupportedPayloadFormat`, `InvalidEnvelope`, `Base64Decode`,
+`Kdf`, `Aead`, `PayloadDecode`, `PayloadEncode`, `InvalidLength`,
+`Io`, `LegacyFormat`. None of these include the passphrase in their
+`Display` or `Debug` output. `LegacyFormat` is surfaced when an
+envelope decrypts to a single `PlainProfile` instead of a
+`ProfileSet` v2 — the operator runs `zz w` and sets up again.
+
+Underlying crates (RustCrypto where applicable):
+`argon2 = "0.5"`, `chacha20poly1305 = "0.10"` (XChaCha20Poly1305),
+`ciborium = "0.2"` for CBOR, `base64 = "0.22"`, `rand_core = "0.6"`
+(`OsRng` for salt and nonce), `zeroize = "1"`.
