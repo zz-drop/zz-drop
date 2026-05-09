@@ -1849,8 +1849,8 @@ impl App {
             }
             // Up/Down cycle through the four real providers
             // (Nextcloud → Google Drive → OneDrive → Dropbox).
-            // Disabled entries (Proton, S3) are listed in the picker
-            // for user awareness but not selectable here.
+            // The Proton entry is listed but disabled until a real
+            // SDK lands; not selectable here.
             KeyCode::Up | KeyCode::Char('k') => {
                 self.state.provider_kind = match self.state.provider_kind {
                     ProviderKind::Nextcloud => ProviderKind::Dropbox,

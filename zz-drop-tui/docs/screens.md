@@ -24,7 +24,7 @@ The 8-step indices are mapped from `Screen::stepper_index()` in
 | Screen | Breadcrumb | Step | Body |
 |---|---|---|---|
 | `Welcome` | `welcome` | – | Tagline + 3-row menu (Configure / Recover / Quit). Recover is a stub that points users at the CLI command `zz z <alias>`. |
-| `Provider` | `setup › provider` | 1 | Single Mint panel with three radio rows (Nextcloud focused; Proton, S3 disabled with `(planned)` hints). |
+| `Provider` | `setup › provider` | 1 | Single Mint panel with five radio rows (Nextcloud · Google Drive · OneDrive · Dropbox active; Proton disabled with a `(planned)` hint). |
 | `NextcloudServer` | `setup › server` | 2 | URL form field, validation tag (`[v URL parses]` / `[x not a URL]`). Pre-filled with `https://`. |
 | `NextcloudAuth` | `setup › auth` | 3 | Two-column: left Mint panel with method radios + (when App Password) username/secret form fields. Right Cyan panel with method-specific copy. |
 | `NextcloudLoginFlow` | `setup › auth › login flow` | 3 | See [`login-flow.md`](login-flow.md). Two-col: QR panel left, link/status panel right. Single-col fallback when terminal is narrow. |

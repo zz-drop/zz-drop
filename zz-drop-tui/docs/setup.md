@@ -20,8 +20,9 @@ Intro and a list of upcoming steps. `Enter` advances.
 
 ## 2. Provider
 
-Lists Nextcloud as the only v1 option. Proton Drive and S3 are visibly
-marked "planned". `Enter` continues with Nextcloud.
+Lists the active providers (Nextcloud, Google Drive, OneDrive,
+Dropbox). Proton Drive is visibly marked "planned" and is not
+selectable. `Enter` continues with the focused provider.
 
 ## 3. Nextcloud — server
 

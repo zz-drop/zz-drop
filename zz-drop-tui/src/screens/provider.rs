@@ -34,7 +34,6 @@ impl ProviderScreen {
                 Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(1),
-                Constraint::Length(1),
                 Constraint::Min(0),
             ])
             .split(inner);
@@ -92,16 +91,6 @@ impl ProviderScreen {
             false,
             "Proton Drive",
             Some("planned · pending official CLI/SDK"),
-            true,
-        );
-        radio::render_row(
-            rows[5],
-            buf,
-            theme,
-            false,
-            false,
-            "S3 / R2",
-            Some("planned · object storage"),
             true,
         );
     }
