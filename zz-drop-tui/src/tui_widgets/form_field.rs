@@ -1,7 +1,7 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 
 use super::glyphs;
 use crate::input::TextInput;
@@ -51,6 +51,7 @@ pub fn render(
     );
     let block = Block::default()
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(theme.border_accent(accent));
     let inner = block.inner(value_area);
     ratatui::widgets::Widget::render(block, value_area, buf);
@@ -161,11 +162,11 @@ mod tests {
         let top = buf[(15, 0)].symbol();
         let bot = buf[(15, 2)].symbol();
         assert!(
-            top == "┌" || top == "+" || !top.is_empty(),
+            top == "╭" || top == "┌" || top == "+" || !top.is_empty(),
             "no top-left corner: `{top}`"
         );
         assert!(
-            bot == "└" || bot == "+" || !bot.is_empty(),
+            bot == "╰" || bot == "└" || bot == "+" || !bot.is_empty(),
             "no bot-left corner: `{bot}`"
         );
     }

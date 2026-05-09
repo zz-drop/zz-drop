@@ -1,7 +1,7 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 
 use super::glyphs;
 use crate::theme::{PanelAccent, Theme};
@@ -13,11 +13,11 @@ use crate::theme::{PanelAccent, Theme};
 /// Layout:
 /// ```text
 /// ▍ login flow v2                 ← bar glyph + title in accent
-/// ┌─────────────────────┐         ← top border in accent
+/// ╭─────────────────────╮         ← top border in accent
 /// │                     │
 /// │  body lines here    │
 /// │                     │
-/// └─────────────────────┘
+/// ╰─────────────────────╯
 /// ```
 pub fn open(
     area: Rect,
@@ -50,6 +50,7 @@ pub fn open(
     );
     let block = Block::default()
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(theme.border_accent(accent));
     let inner = block.inner(block_area);
     ratatui::widgets::Widget::render(block, block_area, buf);
