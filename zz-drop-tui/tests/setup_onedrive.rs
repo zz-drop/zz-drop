@@ -38,7 +38,7 @@ fn k(c: KeyCode) -> KeyEvent {
 }
 
 #[test]
-fn provider_picker_cycles_through_three_real_providers() {
+fn provider_picker_cycles_through_real_providers() {
     let mut app = App::new();
     app.screen = Screen::Provider;
     // Default after `App::new` is `Nextcloud`.
@@ -48,10 +48,12 @@ fn provider_picker_cycles_through_three_real_providers() {
     app.on_key(k(KeyCode::Down));
     assert_eq!(app.state.provider_kind, ProviderKind::OneDrive);
     app.on_key(k(KeyCode::Down));
+    assert_eq!(app.state.provider_kind, ProviderKind::Dropbox);
+    app.on_key(k(KeyCode::Down));
     assert_eq!(app.state.provider_kind, ProviderKind::Nextcloud);
     // Up/k cycles in reverse.
     app.on_key(k(KeyCode::Up));
-    assert_eq!(app.state.provider_kind, ProviderKind::OneDrive);
+    assert_eq!(app.state.provider_kind, ProviderKind::Dropbox);
 }
 
 #[test]
@@ -165,10 +167,12 @@ fn save_profile_with_alias_writes_a_onedrive_provider_profile() {
     onedrive_setup.user_email = "alice@example.org".into();
     onedrive_setup.root_folder = "zz-drop".into();
 
+    let dropbox_setup = zz_drop_tui::wizard::DropboxSetupState::default();
     let outcome = save_profile_with_alias(
         &state,
         &gdrive_setup,
         &onedrive_setup,
+        &dropbox_setup,
         PASS,
         "onedrive-canary",
     );
@@ -298,7 +302,8 @@ fn full_tui_save_path_with_single_char_passphrase() {
     // EXACT pass the TUI hands to `run_save_profile` after Enter
     // on the passphrase screen.
     let pass = "!";
-    let outcome = run_save_profile(&state, &gdrive, &onedrive, pass);
+    let dropbox = zz_drop_tui::wizard::DropboxSetupState::default();
+    let outcome = run_save_profile(&state, &gdrive, &onedrive, &dropbox, pass);
     let path = match outcome {
         SaveProfileOutcome::Ok { path } => path,
         SaveProfileOutcome::Failed(reason) => panic!("save failed: {reason}"),
@@ -366,7 +371,14 @@ fn round_trip_save_then_load_with_alias_override() {
     onedrive_setup.root_folder = "zz-drop".into();
     let _ = (FAST_KDF, WizardMode::CreateLocal);
 
-    let outcome = run_save_profile(&state, &gdrive_setup, &onedrive_setup, "round-trip-pass");
+    let dropbox_setup = zz_drop_tui::wizard::DropboxSetupState::default();
+    let outcome = run_save_profile(
+        &state,
+        &gdrive_setup,
+        &onedrive_setup,
+        &dropbox_setup,
+        "round-trip-pass",
+    );
     let path = match outcome {
         SaveProfileOutcome::Ok { path } => path,
         SaveProfileOutcome::Failed(reason) => panic!("save failed: {reason}"),

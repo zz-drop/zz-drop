@@ -8,10 +8,11 @@ use crate::screens::Screen;
 use crate::screens::nextcloud_auth::AuthFocus;
 use crate::tui_widgets::AgentPill;
 use crate::wizard::{
-    AccountFocus, AuthKind, CollisionChoice, GoogleDriveSetupStage, GoogleDriveSetupState,
-    LoginFlowStage, LoginFlowState, ManageStage, OneDriveSetupStage, OneDriveSetupState,
-    PassphraseFocus, PassphraseStage, ProbeStepStatus, ProviderKind, PushFlowMode,
-    PushFlowState, PushStage, TestOutcome, WelcomeItem, WizardMode, WizardState,
+    AccountFocus, AuthKind, CollisionChoice, DropboxSetupStage, DropboxSetupState,
+    GoogleDriveSetupStage, GoogleDriveSetupState, LoginFlowStage, LoginFlowState, ManageStage,
+    OneDriveSetupStage, OneDriveSetupState, PassphraseFocus, PassphraseStage, ProbeStepStatus,
+    ProviderKind, PushFlowMode, PushFlowState, PushStage, TestOutcome, WelcomeItem, WizardMode,
+    WizardState,
 };
 
 pub struct App {
@@ -45,6 +46,20 @@ pub struct App {
     pub onedrive_setup: OneDriveSetupState,
     pub onedrive_request_init: bool,
     pub onedrive_request_email: bool,
+    /// Dropbox uses Authorization Code + PKCE paste-code, not device
+    /// flow, so it gets its own state struct (`DropboxSetupState`)
+    /// instead of aliasing the Google Drive one. Kept in a separate
+    /// slot for the same reason as the OneDrive setup state.
+    pub dropbox_setup: DropboxSetupState,
+    /// Edge-trigger: build the authorize URL + PKCE verifier on the
+    /// next main-loop tick.
+    pub dropbox_request_init: bool,
+    /// Edge-trigger: POST `code` + `code_verifier` to the Dropbox
+    /// token endpoint on the next main-loop tick.
+    pub dropbox_request_exchange: bool,
+    /// Edge-trigger: fetch the Dropbox account email on the next
+    /// main-loop tick after the exchange completes.
+    pub dropbox_request_email: bool,
     pub graphics: Option<GraphicsCtx>,
     pub passphrase_input: TextInput,
     pub confirm_input: TextInput,
@@ -298,6 +313,10 @@ impl App {
             onedrive_setup: OneDriveSetupState::default(),
             onedrive_request_init: false,
             onedrive_request_email: false,
+            dropbox_setup: DropboxSetupState::default(),
+            dropbox_request_init: false,
+            dropbox_request_exchange: false,
+            dropbox_request_email: false,
             graphics: None,
             passphrase_input: TextInput::masked(),
             confirm_input: TextInput::masked(),
@@ -381,6 +400,7 @@ impl App {
             Screen::NextcloudLoginFlow => self.handle_login_flow(key),
             Screen::SetupGoogleDrive => self.handle_setup_google_drive(key),
             Screen::SetupOneDrive => self.handle_setup_onedrive(key),
+            Screen::SetupDropbox => self.handle_setup_dropbox(key),
             Screen::RemoteFolder => self.handle_remote_folder(key),
             Screen::Collision => self.handle_collision(key),
             Screen::TestUpload => self.handle_test_upload(key),
@@ -1444,6 +1464,9 @@ impl App {
             ProviderKind::OneDrive => crate::alias_gen::suggest_alias_for(
                 crate::alias_gen::ProviderPrefix::OneDrive,
             ),
+            ProviderKind::Dropbox => {
+                crate::alias_gen::suggest_alias_for(crate::alias_gen::ProviderPrefix::Dropbox)
+            }
         };
         self.inner_alias_input.set_value(&suggestion);
         self.inner_alias_state = crate::screens::inner_alias::InnerAliasState::Editing;
@@ -1659,6 +1682,7 @@ impl App {
             zz_drop_core::ProviderProfile::Nextcloud(n) => Some(n),
             zz_drop_core::ProviderProfile::GoogleDrive(_) => None,
             zz_drop_core::ProviderProfile::OneDrive(_) => None,
+            zz_drop_core::ProviderProfile::Dropbox(_) => None,
         }) {
             self.state.provider_kind = ProviderKind::Nextcloud;
             self.state.server_url = nc.server_url.clone();
@@ -1682,6 +1706,7 @@ impl App {
             zz_drop_core::ProviderProfile::GoogleDrive(g) => Some(g),
             zz_drop_core::ProviderProfile::Nextcloud(_) => None,
             zz_drop_core::ProviderProfile::OneDrive(_) => None,
+            zz_drop_core::ProviderProfile::Dropbox(_) => None,
         }) {
             self.state.provider_kind = ProviderKind::GoogleDrive;
             self.gdrive_setup = GoogleDriveSetupState::default();
@@ -1697,6 +1722,7 @@ impl App {
             zz_drop_core::ProviderProfile::OneDrive(o) => Some(o),
             zz_drop_core::ProviderProfile::Nextcloud(_) => None,
             zz_drop_core::ProviderProfile::GoogleDrive(_) => None,
+            zz_drop_core::ProviderProfile::Dropbox(_) => None,
         }) {
             self.state.provider_kind = ProviderKind::OneDrive;
             self.onedrive_setup = OneDriveSetupState::default();
@@ -1708,6 +1734,22 @@ impl App {
             self.onedrive_setup.access_expires_at = od.auth.expires_at;
             self.onedrive_setup.scope = od.auth.scope.clone();
             self.onedrive_setup.stage = OneDriveSetupStage::Done;
+        } else if let Some(db) = profile.providers.iter().find_map(|p| match p {
+            zz_drop_core::ProviderProfile::Dropbox(d) => Some(d),
+            zz_drop_core::ProviderProfile::Nextcloud(_) => None,
+            zz_drop_core::ProviderProfile::GoogleDrive(_) => None,
+            zz_drop_core::ProviderProfile::OneDrive(_) => None,
+        }) {
+            self.state.provider_kind = ProviderKind::Dropbox;
+            self.dropbox_setup = DropboxSetupState::default();
+            self.dropbox_setup.user_email = db.user_email.clone();
+            self.dropbox_setup.root_folder = db.root_folder.clone();
+            self.dropbox_setup.access_token = db.auth.access_token.clone();
+            self.dropbox_setup.refresh_token = db.auth.refresh_token.clone();
+            self.dropbox_setup.token_type = db.auth.token_type.clone();
+            self.dropbox_setup.access_expires_at = db.auth.expires_at;
+            self.dropbox_setup.scope = db.auth.scope.clone();
+            self.dropbox_setup.stage = DropboxSetupStage::Done;
         }
     }
 
@@ -1805,22 +1847,24 @@ impl App {
             KeyCode::Esc | KeyCode::Char('b') | KeyCode::Left => {
                 self.screen = self.screen.previous();
             }
-            // Up/Down cycle through the three real providers
-            // (Nextcloud → Google Drive → OneDrive). Disabled
-            // entries (Proton, S3) are listed in the picker for
-            // user awareness but not selectable here.
+            // Up/Down cycle through the four real providers
+            // (Nextcloud → Google Drive → OneDrive → Dropbox).
+            // Disabled entries (Proton, S3) are listed in the picker
+            // for user awareness but not selectable here.
             KeyCode::Up | KeyCode::Char('k') => {
                 self.state.provider_kind = match self.state.provider_kind {
-                    ProviderKind::Nextcloud => ProviderKind::OneDrive,
+                    ProviderKind::Nextcloud => ProviderKind::Dropbox,
                     ProviderKind::GoogleDrive => ProviderKind::Nextcloud,
                     ProviderKind::OneDrive => ProviderKind::GoogleDrive,
+                    ProviderKind::Dropbox => ProviderKind::OneDrive,
                 };
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 self.state.provider_kind = match self.state.provider_kind {
                     ProviderKind::Nextcloud => ProviderKind::GoogleDrive,
                     ProviderKind::GoogleDrive => ProviderKind::OneDrive,
-                    ProviderKind::OneDrive => ProviderKind::Nextcloud,
+                    ProviderKind::OneDrive => ProviderKind::Dropbox,
+                    ProviderKind::Dropbox => ProviderKind::Nextcloud,
                 };
             }
             KeyCode::Enter | KeyCode::Char('n') | KeyCode::Right => {
@@ -1839,7 +1883,110 @@ impl App {
                         self.onedrive_request_init = true;
                         Screen::SetupOneDrive
                     }
+                    ProviderKind::Dropbox => {
+                        self.dropbox_setup = DropboxSetupState::default();
+                        self.dropbox_request_init = true;
+                        Screen::SetupDropbox
+                    }
                 };
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_setup_dropbox(&mut self, key: KeyEvent) {
+        // Paste-code flow — distinct from device-flow handlers above:
+        // there is no `Polling` stage to QR-toggle from, the only
+        // editable input is `pasted_code`, and Enter triggers the
+        // single-shot exchange instead of waiting for a poll loop.
+        if self.dropbox_setup.show_url_modal {
+            if key.code == KeyCode::Esc {
+                self.dropbox_setup.show_url_modal = false;
+            }
+            return;
+        }
+
+        if matches!(self.dropbox_setup.stage, DropboxSetupStage::Failed(_))
+            && matches!(key.code, KeyCode::Char('r') | KeyCode::Char('R'))
+        {
+            self.dropbox_setup = DropboxSetupState::default();
+            self.dropbox_setup.stage = DropboxSetupStage::Initiating;
+            self.dropbox_request_init = true;
+            return;
+        }
+
+        // Editable input is gated to the AwaitingPaste stage.
+        let editable = matches!(self.dropbox_setup.stage, DropboxSetupStage::AwaitingPaste);
+
+        match key.code {
+            KeyCode::Esc => {
+                self.dropbox_setup = DropboxSetupState::default();
+                self.dropbox_request_init = false;
+                self.dropbox_request_exchange = false;
+                self.dropbox_request_email = false;
+                self.screen = Screen::Provider;
+            }
+            KeyCode::Char('q') if editable => {
+                self.dropbox_setup.show_qr = !self.dropbox_setup.show_qr;
+            }
+            KeyCode::Char('i') if editable => {
+                self.dropbox_setup.disable_inline_qr = !self.dropbox_setup.disable_inline_qr;
+            }
+            KeyCode::Char('c') if editable => {
+                let url = self.dropbox_setup.qr_url();
+                if !url.is_empty() {
+                    let msg = match clipboard::copy_to_clipboard(url) {
+                        Ok(()) => "copied",
+                        Err(reason) => reason,
+                    };
+                    self.dropbox_setup.clipboard_message = Some(msg);
+                }
+            }
+            KeyCode::Char('o') if editable => {
+                let url = self.dropbox_setup.qr_url();
+                if !url.is_empty() {
+                    let msg = match clipboard::open_in_browser(url) {
+                        Ok(()) => "opened",
+                        Err(reason) => reason,
+                    };
+                    self.dropbox_setup.browser_message = Some(msg);
+                }
+            }
+            KeyCode::Char('u') if editable => {
+                if !self.dropbox_setup.authorize_url.is_empty() {
+                    self.dropbox_setup.show_url_modal = true;
+                }
+            }
+            // Paste from clipboard via Ctrl+V (the screen accepts
+            // bare alphanumeric input as the typed code below, so
+            // `v` alone must not shadow the typed letter — the
+            // paste binding is gated on the modifier).
+            KeyCode::Char('v') if editable && key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if let Ok(contents) = clipboard::read_from_clipboard() {
+                    let trimmed = contents.trim();
+                    if !trimmed.is_empty() {
+                        self.dropbox_setup.pasted_code = trimmed.to_string();
+                        self.dropbox_setup.clipboard_message = Some("pasted");
+                    }
+                }
+            }
+            KeyCode::Backspace if editable => {
+                self.dropbox_setup.pasted_code.pop();
+            }
+            KeyCode::Char(c)
+                if editable
+                    && (c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                    && self.dropbox_setup.pasted_code.len() < 200 =>
+            {
+                self.dropbox_setup.pasted_code.push(c);
+            }
+            KeyCode::Enter => {
+                if editable && self.dropbox_setup.pasted_code_appears_valid() {
+                    self.dropbox_setup.stage = DropboxSetupStage::Exchanging;
+                    self.dropbox_request_exchange = true;
+                } else if matches!(self.dropbox_setup.stage, DropboxSetupStage::Done) {
+                    self.screen = Screen::Collision;
+                }
             }
             _ => {}
         }
@@ -2480,6 +2627,59 @@ impl App {
 
     pub fn bump_onedrive_interval(&mut self) {
         self.onedrive_setup.interval_secs = self.onedrive_setup.interval_secs.saturating_add(5);
+    }
+
+    /// Build phase complete: store the local PKCE secret + the
+    /// authorize URL the operator must open. The screen flips to
+    /// `AwaitingPaste` so the input field accepts characters.
+    pub fn apply_dropbox_init(&mut self, authorize_url: String, code_verifier: String) {
+        self.dropbox_setup.authorize_url = authorize_url;
+        self.dropbox_setup.code_verifier = code_verifier;
+        self.dropbox_setup.stage = DropboxSetupStage::AwaitingPaste;
+    }
+
+    pub fn apply_dropbox_init_failed(&mut self, reason: String) {
+        self.dropbox_setup.stage = DropboxSetupStage::Failed(reason);
+    }
+
+    /// Token exchange completed: store the secrets, request the
+    /// account email on the next tick.
+    pub fn apply_dropbox_tokens(
+        &mut self,
+        access_token: String,
+        refresh_token: Option<String>,
+        token_type: String,
+        expires_in: u64,
+        scope: Option<String>,
+    ) {
+        let now = unix_now();
+        self.dropbox_setup.access_token = access_token;
+        if let Some(rt) = refresh_token {
+            self.dropbox_setup.refresh_token = rt;
+        }
+        self.dropbox_setup.token_type = token_type;
+        self.dropbox_setup.access_expires_at = now + expires_in;
+        if let Some(s) = scope {
+            self.dropbox_setup.scope = s;
+        }
+        // Clear the now-consumed paste-code state so a Failed/retry
+        // cycle does not accidentally re-submit the same code.
+        self.dropbox_setup.pasted_code.clear();
+        self.dropbox_setup.code_verifier.clear();
+        self.dropbox_setup.stage = DropboxSetupStage::Fetching;
+        self.dropbox_request_email = true;
+    }
+
+    pub fn apply_dropbox_email(&mut self, email: String) {
+        self.dropbox_setup.user_email = email;
+        self.dropbox_setup.stage = DropboxSetupStage::Done;
+    }
+
+    pub fn apply_dropbox_failed(&mut self, reason: String) {
+        self.dropbox_setup.stage = DropboxSetupStage::Failed(reason);
+        self.dropbox_request_init = false;
+        self.dropbox_request_exchange = false;
+        self.dropbox_request_email = false;
     }
 }
 

@@ -126,6 +126,7 @@ fn provider_summary(profile: &PlainProfile) -> &'static str {
         Some(ProviderProfile::Nextcloud(_)) => "Nextcloud · WebDAV",
         Some(ProviderProfile::GoogleDrive(_)) => "Google Drive · OAuth",
         Some(ProviderProfile::OneDrive(_)) => "OneDrive · OAuth",
+        Some(ProviderProfile::Dropbox(_)) => "Dropbox · OAuth",
         None => "—",
     }
 }

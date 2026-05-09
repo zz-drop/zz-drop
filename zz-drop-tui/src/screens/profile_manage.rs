@@ -89,15 +89,27 @@ impl ProfileManageScreen {
 
         let nc = profile.providers.iter().find_map(|p| match p {
             ProviderProfile::Nextcloud(n) => Some(n),
-            ProviderProfile::GoogleDrive(_) | ProviderProfile::OneDrive(_) => None,
+            ProviderProfile::GoogleDrive(_)
+            | ProviderProfile::OneDrive(_)
+            | ProviderProfile::Dropbox(_) => None,
         });
         let gd = profile.providers.iter().find_map(|p| match p {
             ProviderProfile::GoogleDrive(g) => Some(g),
-            ProviderProfile::Nextcloud(_) | ProviderProfile::OneDrive(_) => None,
+            ProviderProfile::Nextcloud(_)
+            | ProviderProfile::OneDrive(_)
+            | ProviderProfile::Dropbox(_) => None,
         });
         let od = profile.providers.iter().find_map(|p| match p {
             ProviderProfile::OneDrive(o) => Some(o),
-            ProviderProfile::Nextcloud(_) | ProviderProfile::GoogleDrive(_) => None,
+            ProviderProfile::Nextcloud(_)
+            | ProviderProfile::GoogleDrive(_)
+            | ProviderProfile::Dropbox(_) => None,
+        });
+        let db = profile.providers.iter().find_map(|p| match p {
+            ProviderProfile::Dropbox(d) => Some(d),
+            ProviderProfile::Nextcloud(_)
+            | ProviderProfile::GoogleDrive(_)
+            | ProviderProfile::OneDrive(_) => None,
         });
 
         let provider_label = if nc.is_some() {
@@ -106,6 +118,8 @@ impl ProfileManageScreen {
             "Google Drive · OAuth"
         } else if od.is_some() {
             "OneDrive · OAuth"
+        } else if db.is_some() {
+            "Dropbox · OAuth"
         } else {
             "—"
         };

@@ -8,6 +8,7 @@ pub mod nextcloud_auth;
 pub mod nextcloud_login_flow;
 pub mod nextcloud_server;
 pub mod profile_manage;
+pub mod setup_dropbox;
 pub mod setup_onedrive;
 pub mod profile_passphrase;
 pub mod profile_unlock;
@@ -33,6 +34,11 @@ pub enum Screen {
     /// `SetupGoogleDrive` (both follow RFC 8628), driven by
     /// Microsoft identity platform v2 endpoints.
     SetupOneDrive,
+    /// Dropbox OAuth Authorization Code + PKCE paste-code setup.
+    /// Different shape from `SetupOneDrive` because Dropbox does
+    /// not implement the device authorization grant — the operator
+    /// approves the URL in a browser and pastes back the code.
+    SetupDropbox,
     RemoteFolder,
     Collision,
     TestUpload,
@@ -73,6 +79,7 @@ impl Screen {
             Self::NextcloudLoginFlow => nextcloud_login_flow::NextcloudLoginFlowScreen::title(),
             Self::SetupGoogleDrive => setup_google_drive::SetupGoogleDriveScreen::title(),
             Self::SetupOneDrive => setup_onedrive::SetupOneDriveScreen::title(),
+            Self::SetupDropbox => setup_dropbox::SetupDropboxScreen::title(),
             Self::RemoteFolder => remote_folder::RemoteFolderScreen::title(),
             Self::Collision => collision::CollisionScreen::title(),
             Self::TestUpload => test_upload::TestUploadScreen::title(),
@@ -105,6 +112,7 @@ impl Screen {
             // and goes straight to the collision policy step.
             Self::SetupGoogleDrive => Self::Collision,
             Self::SetupOneDrive => Self::Collision,
+            Self::SetupDropbox => Self::Collision,
             Self::RemoteFolder => Self::Collision,
             Self::Collision => Self::TestUpload,
             Self::TestUpload => Self::ProfilePassphrase,
@@ -132,6 +140,7 @@ impl Screen {
             Self::NextcloudLoginFlow => Self::NextcloudAuth,
             Self::SetupGoogleDrive => Self::Provider,
             Self::SetupOneDrive => Self::Provider,
+            Self::SetupDropbox => Self::Provider,
             Self::RemoteFolder => Self::NextcloudAuth,
             Self::Collision => Self::RemoteFolder,
             Self::TestUpload => Self::Collision,
@@ -167,6 +176,7 @@ impl Screen {
             // provider; it lights up step 3 in the stepper.
             Self::SetupGoogleDrive => Some(3),
             Self::SetupOneDrive => Some(3),
+            Self::SetupDropbox => Some(3),
             Self::RemoteFolder | Self::Collision | Self::TestUpload => Some(4),
             Self::ProfilePassphrase => Some(5),
             // step 6 = push (the new "push to zz-drop.net" sub-flow)

@@ -34,6 +34,7 @@ impl ProviderScreen {
                 Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(1),
+                Constraint::Length(1),
                 Constraint::Min(0),
             ])
             .split(inner);
@@ -41,6 +42,7 @@ impl ProviderScreen {
         let nc_focused = matches!(selected, ProviderKind::Nextcloud);
         let gd_focused = matches!(selected, ProviderKind::GoogleDrive);
         let od_focused = matches!(selected, ProviderKind::OneDrive);
+        let db_focused = matches!(selected, ProviderKind::Dropbox);
 
         radio::render_row(
             rows[0],
@@ -76,6 +78,16 @@ impl ProviderScreen {
             rows[3],
             buf,
             theme,
+            db_focused,
+            db_focused,
+            "Dropbox · OAuth",
+            Some("paste-code · App folder"),
+            false,
+        );
+        radio::render_row(
+            rows[4],
+            buf,
+            theme,
             false,
             false,
             "Proton Drive",
@@ -83,7 +95,7 @@ impl ProviderScreen {
             true,
         );
         radio::render_row(
-            rows[4],
+            rows[5],
             buf,
             theme,
             false,

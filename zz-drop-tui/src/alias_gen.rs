@@ -51,6 +51,7 @@ pub enum ProviderPrefix {
     GoogleDrive,
     OneDrive,
     ProtonDrive,
+    Dropbox,
 }
 
 impl ProviderPrefix {
@@ -60,6 +61,7 @@ impl ProviderPrefix {
             Self::GoogleDrive => "gdrive",
             Self::OneDrive => "onedrive",
             Self::ProtonDrive => "proton",
+            Self::Dropbox => "dropbox",
         }
     }
 }
@@ -164,6 +166,7 @@ mod tests {
             (ProviderPrefix::GoogleDrive, "gdrive-"),
             (ProviderPrefix::OneDrive, "onedrive-"),
             (ProviderPrefix::ProtonDrive, "proton-"),
+            (ProviderPrefix::Dropbox, "dropbox-"),
         ] {
             let alias = suggest_alias_for(prefix);
             assert!(

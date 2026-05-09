@@ -2,6 +2,9 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use zz_drop_core::CollisionPolicy;
+use zz_drop_core::providers::dropbox::{
+    self, DropboxAuth, DropboxClient, DropboxProfile, diagnose as dropbox_diagnose,
+};
 use zz_drop_core::providers::google_drive::{
     self, GoogleDriveAuth, GoogleDriveClient, GoogleDriveProfile,
     diagnose as gdrive_diagnose,
@@ -16,7 +19,9 @@ use zz_drop_core::providers::onedrive::{
     diagnose as onedrive_diagnose,
 };
 
-use crate::wizard::{GoogleDriveSetupState, OneDriveSetupState, ProviderKind, WizardState};
+use crate::wizard::{
+    DropboxSetupState, GoogleDriveSetupState, OneDriveSetupState, ProviderKind, WizardState,
+};
 
 pub enum LoginFlowInitOutcome {
     Ok {
@@ -90,6 +95,7 @@ pub enum ProbeContext {
     Nextcloud(NextcloudProbeContext),
     GoogleDrive(GoogleDriveProbeContext),
     OneDrive(OneDriveProbeContext),
+    Dropbox(DropboxProbeContext),
 }
 
 pub struct NextcloudProbeContext {
@@ -113,6 +119,13 @@ pub struct OneDriveProbeContext {
     test_basename: String,
 }
 
+pub struct DropboxProbeContext {
+    client: DropboxClient,
+    marker_tmp: PathBuf,
+    test_tmp: PathBuf,
+    test_basename: String,
+}
+
 pub enum ProbeEnsureOutcome {
     Ok(ProbeContext),
     Failed(String),
@@ -125,11 +138,13 @@ pub fn run_probe_ensure(
     state: &WizardState,
     gdrive_setup: &GoogleDriveSetupState,
     onedrive_setup: &OneDriveSetupState,
+    dropbox_setup: &DropboxSetupState,
 ) -> ProbeEnsureOutcome {
     match state.provider_kind {
         ProviderKind::Nextcloud => run_probe_ensure_nextcloud(state),
         ProviderKind::GoogleDrive => run_probe_ensure_gdrive(gdrive_setup),
         ProviderKind::OneDrive => run_probe_ensure_onedrive(onedrive_setup),
+        ProviderKind::Dropbox => run_probe_ensure_dropbox(dropbox_setup),
     }
 }
 
@@ -258,6 +273,47 @@ fn run_probe_ensure_onedrive(onedrive_setup: &OneDriveSetupState) -> ProbeEnsure
     }))
 }
 
+fn run_probe_ensure_dropbox(dropbox_setup: &DropboxSetupState) -> ProbeEnsureOutcome {
+    let profile = match dropbox_profile_from_setup(dropbox_setup) {
+        Some(p) => p,
+        None => return ProbeEnsureOutcome::Failed("oauth tokens missing".into()),
+    };
+
+    let client = match DropboxClient::from_profile(profile) {
+        Ok(c) => c,
+        Err(e) => return ProbeEnsureOutcome::Failed(dropbox_diagnose(&e).to_string()),
+    };
+
+    if let Err(e) = client.ensure_root_folder() {
+        return ProbeEnsureOutcome::Failed(format!(
+            "ensure folder: {}",
+            dropbox_diagnose(&e)
+        ));
+    }
+
+    let nonce = make_nonce();
+    let test_basename = format!("{TEST_FILE_BASENAME_PREFIX}{nonce}.txt");
+
+    let marker_tmp = match write_local_temp(MARKER_BODY) {
+        Ok(p) => p,
+        Err(_) => return ProbeEnsureOutcome::Failed("local file error".into()),
+    };
+    let test_tmp = match write_local_temp(TEST_FILE_BODY) {
+        Ok(p) => p,
+        Err(_) => {
+            let _ = std::fs::remove_file(&marker_tmp);
+            return ProbeEnsureOutcome::Failed("local file error".into());
+        }
+    };
+
+    ProbeEnsureOutcome::Ok(ProbeContext::Dropbox(DropboxProbeContext {
+        client,
+        marker_tmp,
+        test_tmp,
+        test_basename,
+    }))
+}
+
 pub enum ProbeStepOutcome {
     Ok(ProbeContext),
     Failed(String),
@@ -271,6 +327,7 @@ pub fn run_probe_marker(ctx: ProbeContext) -> ProbeStepOutcome {
         ProbeContext::Nextcloud(c) => run_probe_marker_nextcloud(c),
         ProbeContext::GoogleDrive(c) => run_probe_marker_gdrive(c),
         ProbeContext::OneDrive(c) => run_probe_marker_onedrive(c),
+        ProbeContext::Dropbox(c) => run_probe_marker_dropbox(c),
     }
 }
 
@@ -320,6 +377,22 @@ fn run_probe_marker_onedrive(ctx: OneDriveProbeContext) -> ProbeStepOutcome {
     }
 }
 
+fn run_probe_marker_dropbox(ctx: DropboxProbeContext) -> ProbeStepOutcome {
+    let result = ctx.client.upload_to(
+        &ctx.marker_tmp,
+        &[MARKER_BASENAME],
+        CollisionPolicy::Overwrite,
+    );
+    let _ = std::fs::remove_file(&ctx.marker_tmp);
+    match result {
+        Ok(_) => ProbeStepOutcome::Ok(ProbeContext::Dropbox(DropboxProbeContext {
+            marker_tmp: PathBuf::new(),
+            ..ctx
+        })),
+        Err(e) => ProbeStepOutcome::Failed(format!("marker: {}", dropbox_diagnose(&e))),
+    }
+}
+
 /// Stage 3: upload the disposable test file. Used only to confirm the
 /// upload path works end-to-end; stage 4 deletes it.
 pub fn run_probe_upload(ctx: ProbeContext) -> ProbeStepOutcome {
@@ -327,6 +400,7 @@ pub fn run_probe_upload(ctx: ProbeContext) -> ProbeStepOutcome {
         ProbeContext::Nextcloud(c) => run_probe_upload_nextcloud(c),
         ProbeContext::GoogleDrive(c) => run_probe_upload_gdrive(c),
         ProbeContext::OneDrive(c) => run_probe_upload_onedrive(c),
+        ProbeContext::Dropbox(c) => run_probe_upload_dropbox(c),
     }
 }
 
@@ -372,6 +446,20 @@ fn run_probe_upload_onedrive(ctx: OneDriveProbeContext) -> ProbeStepOutcome {
     }
 }
 
+fn run_probe_upload_dropbox(ctx: DropboxProbeContext) -> ProbeStepOutcome {
+    let result =
+        ctx.client
+            .upload_to(&ctx.test_tmp, &[&ctx.test_basename], CollisionPolicy::Overwrite);
+    let _ = std::fs::remove_file(&ctx.test_tmp);
+    match result {
+        Ok(_) => ProbeStepOutcome::Ok(ProbeContext::Dropbox(DropboxProbeContext {
+            test_tmp: PathBuf::new(),
+            ..ctx
+        })),
+        Err(e) => ProbeStepOutcome::Failed(format!("upload: {}", dropbox_diagnose(&e))),
+    }
+}
+
 pub enum ProbeCleanupOutcome {
     Ok,
     Failed(String),
@@ -393,6 +481,10 @@ pub fn run_probe_cleanup(ctx: ProbeContext) -> ProbeCleanupOutcome {
         ProbeContext::OneDrive(c) => match c.client.delete_at(&[&c.test_basename], true) {
             Ok(()) => ProbeCleanupOutcome::Ok,
             Err(e) => ProbeCleanupOutcome::Failed(format!("delete: {}", onedrive_diagnose(&e))),
+        },
+        ProbeContext::Dropbox(c) => match c.client.delete_at(&[&c.test_basename], true) {
+            Ok(()) => ProbeCleanupOutcome::Ok,
+            Err(e) => ProbeCleanupOutcome::Failed(format!("delete: {}", dropbox_diagnose(&e))),
         },
     }
 }
@@ -453,6 +545,31 @@ fn onedrive_profile_from_setup(s: &OneDriveSetupState) -> Option<OneDriveProfile
     })
 }
 
+/// Build a `DropboxProfile` from the live wizard setup state. Same
+/// defensive contract: returns `None` when either token is empty so
+/// the screen flow cannot commit a half-completed paste-code run
+/// to disk.
+fn dropbox_profile_from_setup(s: &DropboxSetupState) -> Option<DropboxProfile> {
+    if s.access_token.is_empty() || s.refresh_token.is_empty() {
+        return None;
+    }
+    Some(DropboxProfile {
+        root_folder: if s.root_folder.is_empty() {
+            dropbox::DROPBOX_DEFAULT_ROOT.to_string()
+        } else {
+            s.root_folder.clone()
+        },
+        user_email: s.user_email.clone(),
+        auth: DropboxAuth {
+            access_token: s.access_token.clone(),
+            refresh_token: s.refresh_token.clone(),
+            token_type: s.token_type.clone(),
+            expires_at: s.access_expires_at,
+            scope: s.scope.clone(),
+        },
+    })
+}
+
 fn make_nonce() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let n = SystemTime::now()
@@ -485,11 +602,12 @@ pub fn run_save_profile(
     state: &WizardState,
     gdrive_setup: &GoogleDriveSetupState,
     onedrive_setup: &OneDriveSetupState,
+    dropbox_setup: &DropboxSetupState,
     passphrase: &str,
 ) -> SaveProfileOutcome {
     // Pre-push placeholder alias depends on the provider:
-    // Nextcloud uses the WebDAV username; Google Drive uses the
-    // local-part of the Google account email so the wizard pill has
+    // Nextcloud uses the WebDAV username; OAuth providers use the
+    // local-part of the account email so the wizard pill has
     // something readable to show before the operator picks the
     // server alias.
     // If the wizard collected an explicit alias (always the case
@@ -512,9 +630,22 @@ pub fn run_save_profile(
                 .next()
                 .unwrap_or("")
                 .to_string(),
+            ProviderKind::Dropbox => dropbox_setup
+                .user_email
+                .split('@')
+                .next()
+                .unwrap_or("")
+                .to_string(),
         },
     };
-    save_profile_with_alias(state, gdrive_setup, onedrive_setup, passphrase, &alias)
+    save_profile_with_alias(
+        state,
+        gdrive_setup,
+        onedrive_setup,
+        dropbox_setup,
+        passphrase,
+        &alias,
+    )
 }
 
 /// Build a `PlainProfile` from the wizard state with `alias` as the
@@ -526,6 +657,7 @@ pub fn save_profile_with_alias(
     state: &WizardState,
     gdrive_setup: &GoogleDriveSetupState,
     onedrive_setup: &OneDriveSetupState,
+    dropbox_setup: &DropboxSetupState,
     passphrase: &str,
     alias: &str,
 ) -> SaveProfileOutcome {
@@ -559,6 +691,14 @@ pub fn save_profile_with_alias(
             None => {
                 return SaveProfileOutcome::Failed(
                     "onedrive setup did not yield tokens".into(),
+                );
+            }
+        },
+        ProviderKind::Dropbox => match dropbox_profile_from_setup(dropbox_setup) {
+            Some(db) => (vec![ProviderProfile::Dropbox(db)], "dropbox"),
+            None => {
+                return SaveProfileOutcome::Failed(
+                    "dropbox setup did not yield tokens".into(),
                 );
             }
         },

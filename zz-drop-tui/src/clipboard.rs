@@ -20,3 +20,18 @@ pub fn open_in_browser(url: &str) -> Result<(), &'static str> {
         Err(_) => Err("could not open browser"),
     }
 }
+
+/// Best-effort clipboard read. Returns the textual contents on
+/// success and a short reason string on failure. Used by the
+/// Dropbox paste-code setup screen so the operator does not have
+/// to type 30+ characters of authorization code by hand.
+pub fn read_from_clipboard() -> Result<String, &'static str> {
+    let mut ctx = match arboard::Clipboard::new() {
+        Ok(c) => c,
+        Err(_) => return Err("clipboard not available"),
+    };
+    match ctx.get_text() {
+        Ok(t) => Ok(t),
+        Err(_) => Err("clipboard read failed"),
+    }
+}

@@ -14,8 +14,8 @@ use crate::screens::{
     container_picker::ContainerPickerScreen, inner_alias::InnerAliasScreen,
     profile_unlock::ProfileUnlockScreen, provider::ProviderScreen,
     push_profile::PushProfileScreen, remote_folder::RemoteFolderScreen, screen_shows_steps,
-    setup_google_drive::SetupGoogleDriveScreen, setup_onedrive::SetupOneDriveScreen,
-    test_upload::TestUploadScreen,
+    setup_dropbox::SetupDropboxScreen, setup_google_drive::SetupGoogleDriveScreen,
+    setup_onedrive::SetupOneDriveScreen, test_upload::TestUploadScreen,
     welcome::WelcomeScreen,
 };
 use crate::theme::Theme;
@@ -157,6 +157,10 @@ pub fn draw(frame: &mut Frame<'_>, app: &mut App, theme: &Theme) {
             Screen::SetupOneDrive => {
                 qr_area =
                     SetupOneDriveScreen::render(rects.body, buf, theme, &app.onedrive_setup);
+            }
+            Screen::SetupDropbox => {
+                qr_area =
+                    SetupDropboxScreen::render(rects.body, buf, theme, &app.dropbox_setup);
             }
             Screen::RemoteFolder => RemoteFolderScreen::render(
                 rects.body,
@@ -320,6 +324,7 @@ fn breadcrumb_for(s: Screen) -> &'static str {
         Screen::NextcloudLoginFlow => "setup › auth › login flow",
         Screen::SetupGoogleDrive => "setup › google drive",
         Screen::SetupOneDrive => "setup › onedrive",
+        Screen::SetupDropbox => "setup › dropbox",
         Screen::RemoteFolder => "setup › folder",
         Screen::Collision => "setup › collision",
         Screen::TestUpload => "setup › probe",
@@ -378,6 +383,7 @@ fn keybar_for(app: &App) -> Vec<KeyHint> {
         Screen::NextcloudLoginFlow => NextcloudLoginFlowScreen::keybar_hint(&app.login_flow),
         Screen::SetupGoogleDrive => SetupGoogleDriveScreen::keybar_hint(&app.gdrive_setup),
         Screen::SetupOneDrive => SetupOneDriveScreen::keybar_hint(&app.onedrive_setup),
+        Screen::SetupDropbox => SetupDropboxScreen::keybar_hint(&app.dropbox_setup),
         Screen::RemoteFolder => RemoteFolderScreen::keybar_hint(app.state.remote_folder_valid()),
         Screen::Collision => CollisionScreen::keybar_hint(),
         Screen::TestUpload => TestUploadScreen::keybar_hint(

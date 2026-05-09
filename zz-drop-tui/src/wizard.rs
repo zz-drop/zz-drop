@@ -24,15 +24,16 @@ pub struct WizardState {
 
 /// Which provider the user picked at the Provider screen. Drives the
 /// branching from `Provider` → `NextcloudServer` vs. `Provider` →
-/// `SetupGoogleDrive` vs. `Provider` → `SetupOneDrive`. Stored on
-/// `WizardState` so re-entering the Provider picker keeps the
-/// previous choice highlighted.
+/// `SetupGoogleDrive` vs. `Provider` → `SetupOneDrive` vs. `Provider`
+/// → `SetupDropbox`. Stored on `WizardState` so re-entering the
+/// Provider picker keeps the previous choice highlighted.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ProviderKind {
     #[default]
     Nextcloud,
     GoogleDrive,
     OneDrive,
+    Dropbox,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -349,6 +350,131 @@ impl GoogleDriveSetupState {
 /// and in the dedicated `screens::setup_onedrive` render.
 pub type OneDriveSetupState = GoogleDriveSetupState;
 pub type OneDriveSetupStage = GoogleDriveSetupStage;
+
+/// Stages of the OAuth Authorization Code + PKCE paste-code flow
+/// used by the Dropbox setup screen. Differs from the device-flow
+/// stages (Google Drive / OneDrive) in two ways: there is no
+/// `Polling` stage because Dropbox does not implement the device
+/// authorization grant, and there is an explicit `AwaitingPaste`
+/// stage where the operator types back the code shown by Dropbox
+/// on the consent page.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum DropboxSetupStage {
+    #[default]
+    NotStarted,
+    /// Building the authorize URL + PKCE verifier locally. Brief
+    /// — no network round-trip, but useful as a discrete state so
+    /// the keybar shows nothing actionable while the URL is being
+    /// composed.
+    Initiating,
+    /// `authorize_url` is on screen; the operator opens it in a
+    /// browser, approves, and types back the code Dropbox displays
+    /// on the consent page. The code field is editable here.
+    AwaitingPaste,
+    /// POST to the Dropbox token endpoint with `code` +
+    /// `code_verifier` is in flight. Single shot — no polling.
+    Exchanging,
+    /// Tokens issued; resolving the user's email via
+    /// `/2/users/get_current_account` so the profile summary can
+    /// show "you upload as alice@example.com".
+    Fetching,
+    /// Setup completed — `tokens` and `user_email` populated.
+    Done,
+    Failed(String),
+}
+
+/// State for the Dropbox setup screen.
+///
+/// `code_verifier` is the PKCE secret generated locally and bound
+/// to the `authorize_url` shown to the operator; it must persist
+/// for the whole flow because the token endpoint requires it on the
+/// code → tokens exchange. Like the other OAuth setup states, the
+/// access and refresh tokens are post-success secrets persisted
+/// only into the encrypted profile blob — never on disk in clear.
+pub struct DropboxSetupState {
+    pub stage: DropboxSetupStage,
+    /// Authorize URL the operator opens in a browser.
+    pub authorize_url: String,
+    /// PKCE secret. Lifecycle: generated at setup start, consumed
+    /// by the token endpoint, then cleared on Done. Never logged.
+    pub code_verifier: String,
+    /// What the operator typed back from the dropbox.com page. The
+    /// `AwaitingPaste` stage owns this field; it is consumed and
+    /// cleared on Exchanging.
+    pub pasted_code: String,
+    pub show_url_modal: bool,
+    pub show_qr: bool,
+    pub disable_inline_qr: bool,
+    pub clipboard_message: Option<&'static str>,
+    pub browser_message: Option<&'static str>,
+    /// Folder name input. Default `"zz-drop"`. Edited in the Done
+    /// stage before the profile is committed.
+    pub root_folder: String,
+    pub user_email: String,
+    /// Populated after the exchange completes.
+    pub access_token: String,
+    pub refresh_token: String,
+    pub token_type: String,
+    pub access_expires_at: u64,
+    pub scope: String,
+}
+
+impl Default for DropboxSetupState {
+    fn default() -> Self {
+        Self {
+            stage: DropboxSetupStage::default(),
+            authorize_url: String::new(),
+            code_verifier: String::new(),
+            pasted_code: String::new(),
+            show_url_modal: false,
+            show_qr: true,
+            disable_inline_qr: false,
+            clipboard_message: None,
+            browser_message: None,
+            root_folder: "zz-drop".to_string(),
+            user_email: String::new(),
+            access_token: String::new(),
+            refresh_token: String::new(),
+            token_type: String::new(),
+            access_expires_at: 0,
+            scope: String::new(),
+        }
+    }
+}
+
+impl fmt::Debug for DropboxSetupState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "DropboxSetupState {{ stage: {:?}, user_email_set: {}, <secrets redacted> }}",
+            self.stage,
+            !self.user_email.is_empty()
+        )
+    }
+}
+
+impl DropboxSetupState {
+    /// URL the QR encodes — Dropbox has no `_complete` form so we
+    /// just QR the authorize URL itself. Returns `""` when the
+    /// flow has not yet built the URL.
+    pub fn qr_url(&self) -> &str {
+        &self.authorize_url
+    }
+
+    /// True when the operator has typed enough characters that the
+    /// code looks valid (Dropbox codes are short alphanumeric
+    /// strings, typically 30–60 chars). Used to gate the
+    /// `↵ exchange` keybar hint.
+    pub fn pasted_code_appears_valid(&self) -> bool {
+        let trimmed = self.pasted_code.trim();
+        if trimmed.len() < 8 {
+            return false;
+        }
+        trimmed
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    }
+}
 
 impl LoginFlowState {
     pub fn truncated_login_url(&self, max_chars: usize) -> String {

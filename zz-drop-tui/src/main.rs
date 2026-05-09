@@ -5,10 +5,13 @@ use std::time::{Duration, Instant};
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 
+use zz_drop_core::providers::dropbox::{
+    self as dropbox_core, DropboxAuth, DropboxClient, DropboxProfile,
+};
 use zz_drop_core::providers::google_drive::{
     self, GoogleDriveAuth, GoogleDriveClient, GoogleDriveProfile,
 };
-use zz_drop_core::providers::oauth::{DeviceFlowClient, PollOutcome};
+use zz_drop_core::providers::oauth::{DeviceFlowClient, PasteCodeFlow, PollOutcome};
 use zz_drop_core::providers::onedrive::{
     self as onedrive_core, OneDriveAuth, OneDriveClient, OneDriveProfile,
 };
@@ -116,6 +119,7 @@ fn run(
                 &app.state,
                 &app.gdrive_setup,
                 &app.onedrive_setup,
+                &app.dropbox_setup,
             ) {
                 ProbeEnsureOutcome::Ok(ctx) => {
                     app.mark_probe_ensure_ok();
@@ -217,6 +221,7 @@ fn run(
                 &app.state,
                 &app.gdrive_setup,
                 &app.onedrive_setup,
+                &app.dropbox_setup,
                 &pass,
             );
             match &outcome {
@@ -357,6 +362,7 @@ fn run(
                 &app.state,
                 &app.gdrive_setup,
                 &app.onedrive_setup,
+                &app.dropbox_setup,
                 &pass,
                 &alias,
             ) {
@@ -648,6 +654,75 @@ fn run(
             }
         }
 
+        // Dropbox paste-code flow — three blocks, but no polling.
+        // `init` builds the authorize URL + PKCE verifier locally
+        // (no network round-trip); `exchange` sends the user-typed
+        // code to the token endpoint; `email` resolves the account
+        // metadata for display.
+        if app.dropbox_request_init {
+            app.dropbox_request_init = false;
+            terminal.draw(|frame| ui::draw(frame, &mut app, &theme))?;
+            // Build authorize URL + freshly generated PKCE verifier
+            // here. We stash the verifier in `dropbox_setup` so the
+            // exchange tick (potentially many seconds later, after
+            // the operator has copy/pasted the code) can rebuild a
+            // PasteCodeFlow seeded with the same verifier.
+            let cfg = dropbox_core::paste_code_config();
+            let flow = PasteCodeFlow::new(cfg);
+            let url = flow.authorize_url();
+            let verifier = flow.verifier().to_string();
+            app.apply_dropbox_init(url, verifier);
+            continue;
+        }
+
+        if app.dropbox_request_exchange {
+            app.dropbox_request_exchange = false;
+            terminal.draw(|frame| ui::draw(frame, &mut app, &theme))?;
+            let code = app.dropbox_setup.pasted_code.trim().to_string();
+            let verifier = app.dropbox_setup.code_verifier.clone();
+            // Rebuild a fresh flow seeded with the same verifier so
+            // PKCE matches the authorize URL the operator opened.
+            let cfg = dropbox_core::paste_code_config();
+            let result = PasteCodeFlow::with_verifier(cfg, verifier).exchange_code(&code);
+            match result {
+                Ok(t) => {
+                    app.apply_dropbox_tokens(
+                        t.access_token,
+                        t.refresh_token,
+                        t.token_type,
+                        t.expires_in,
+                        t.scope,
+                    );
+                }
+                Err(e) => app.apply_dropbox_failed(format!("{e}")),
+            }
+            continue;
+        }
+
+        if app.dropbox_request_email {
+            app.dropbox_request_email = false;
+            terminal.draw(|frame| ui::draw(frame, &mut app, &theme))?;
+            let auth = DropboxAuth {
+                access_token: app.dropbox_setup.access_token.clone(),
+                refresh_token: app.dropbox_setup.refresh_token.clone(),
+                token_type: app.dropbox_setup.token_type.clone(),
+                expires_at: app.dropbox_setup.access_expires_at,
+                scope: app.dropbox_setup.scope.clone(),
+            };
+            let profile = DropboxProfile {
+                root_folder: app.dropbox_setup.root_folder.clone(),
+                user_email: String::new(),
+                auth,
+            };
+            let result =
+                DropboxClient::from_profile(profile).and_then(|c| c.fetch_user_email());
+            match result {
+                Ok(email) => app.apply_dropbox_email(email),
+                Err(e) => app.apply_dropbox_failed(format!("could not resolve account: {e}")),
+            }
+            continue;
+        }
+
         if event::poll(Duration::from_millis(200))? {
             if let Event::Key(key) = event::read()?
                 && key.kind == KeyEventKind::Press
@@ -770,6 +845,30 @@ fn perform_add_inner_profile(
                 auth,
             };
             (vec![ProviderProfile::OneDrive(odp)], "onedrive")
+        }
+        zz_drop_tui::wizard::ProviderKind::Dropbox => {
+            let db = &app.dropbox_setup;
+            if db.access_token.is_empty() || db.refresh_token.is_empty() {
+                return Err("dropbox setup did not yield tokens".into());
+            }
+            let auth = DropboxAuth {
+                access_token: db.access_token.clone(),
+                refresh_token: db.refresh_token.clone(),
+                token_type: db.token_type.clone(),
+                expires_at: db.access_expires_at,
+                scope: db.scope.clone(),
+            };
+            let root = if db.root_folder.is_empty() {
+                "zz-drop".to_string()
+            } else {
+                db.root_folder.clone()
+            };
+            let dbp = DropboxProfile {
+                root_folder: root,
+                user_email: db.user_email.clone(),
+                auth,
+            };
+            (vec![ProviderProfile::Dropbox(dbp)], "dropbox")
         }
     };
 
