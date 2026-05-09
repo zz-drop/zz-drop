@@ -52,7 +52,7 @@ pub struct DropboxClient {
 
 impl DropboxClient {
     pub fn from_profile(profile: DropboxProfile) -> Result<Self, DropboxError> {
-        validate_filename(profile.root_folder.trim())?;
+        validate_root_folder(profile.root_folder.trim())?;
 
         let agent: Agent = Agent::config_builder()
             .timeout_global(Some(std::time::Duration::from_secs(HTTP_TIMEOUT_SECS)))
@@ -110,7 +110,14 @@ impl DropboxClient {
     pub fn ensure_root_folder(&self) -> Result<(), DropboxError> {
         self.ensure_fresh_token()?;
         let root = self.profile.borrow().root_folder.clone();
-        validate_filename(&root)?;
+        validate_root_folder(&root)?;
+        // Empty root means "use the App folder sandbox root
+        // directly". Dropbox creates `Apps/zz-drop/` automatically
+        // on the first authorize, so there is nothing to ensure
+        // here — and trying to create_folder on `/` returns 400.
+        if root.is_empty() {
+            return Ok(());
+        }
         let path = format!("/{root}");
         self.create_folder_idempotent(&path)
     }
@@ -123,7 +130,7 @@ impl DropboxClient {
         // Build progressively deeper paths; create_folder_v2 errors
         // with `path/conflict/folder` if it already exists, which we
         // treat as success.
-        let mut path = format!("/{}", self.profile.borrow().root_folder);
+        let mut path = self.root_prefix();
         for seg in segments {
             path.push('/');
             path.push_str(seg);
@@ -362,13 +369,27 @@ impl DropboxClient {
     }
 
     fn path_for_segments(&self, segments: &[&str]) -> String {
-        let root = self.profile.borrow().root_folder.clone();
-        let mut p = format!("/{root}");
+        let mut p = self.root_prefix();
         for s in segments {
             p.push('/');
             p.push_str(s);
         }
         p
+    }
+
+    /// Build the path prefix for this profile's `root_folder`.
+    /// Empty root → empty prefix (the App folder sandbox root);
+    /// non-empty root → `/<root>`. Callers append `/seg` to extend
+    /// the path; the empty-prefix case yields `/seg` cleanly,
+    /// matching Dropbox's convention that paths inside an App-folder
+    /// app are rooted at the sandbox.
+    fn root_prefix(&self) -> String {
+        let root = self.profile.borrow().root_folder.clone();
+        if root.is_empty() {
+            String::new()
+        } else {
+            format!("/{root}")
+        }
     }
 
     // ── Low-level HTTP helpers ──────────────────────────────────
@@ -526,6 +547,19 @@ fn validate_filename(name: &str) -> Result<(), DropboxError> {
     Ok(())
 }
 
+/// Looser validation for the profile's `root_folder`. Empty is the
+/// new default — it means "use the App folder sandbox root directly"
+/// so the user's Dropbox shows files under `Apps/zz-drop/...` instead
+/// of the redundant `Apps/zz-drop/zz-drop/...` we used to produce.
+/// Existing profiles persisted with `root_folder = "zz-drop"` still
+/// validate and keep their legacy folder layout.
+fn validate_root_folder(name: &str) -> Result<(), DropboxError> {
+    if name.is_empty() {
+        return Ok(());
+    }
+    validate_filename(name)
+}
+
 fn join_path(parent_path: &str, leaf: &str) -> String {
     let mut out = String::with_capacity(parent_path.len() + 1 + leaf.len());
     out.push_str(parent_path);
@@ -611,6 +645,20 @@ mod tests {
         assert!(validate_filename("..").is_err());
         assert!(validate_filename("a/b").is_err());
         assert!(validate_filename("a\0b").is_err());
+    }
+
+    #[test]
+    fn validate_root_folder_accepts_empty_and_legacy() {
+        // Empty root = new default (use App folder sandbox root);
+        // a single segment is the legacy layout still accepted.
+        assert!(validate_root_folder("").is_ok());
+        assert!(validate_root_folder("zz-drop").is_ok());
+        // Same defensive rules as filenames apply for non-empty
+        // values — no slashes, no traversal, no NUL.
+        assert!(validate_root_folder(".").is_err());
+        assert!(validate_root_folder("..").is_err());
+        assert!(validate_root_folder("a/b").is_err());
+        assert!(validate_root_folder("a\0b").is_err());
     }
 
     #[test]

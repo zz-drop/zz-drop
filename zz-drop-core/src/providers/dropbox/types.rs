@@ -19,9 +19,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct DropboxProfile {
     /// Folder name where zz-drop creates files, relative to the
-    /// app's sandbox. Default `"zz-drop"`. The path Dropbox sees is
-    /// `/{root_folder}/...`; the user sees
-    /// `Apps/zz-drop/{root_folder}/...`.
+    /// app's sandbox. Default is the **empty string**, meaning
+    /// "use the App folder sandbox root directly" — the user sees
+    /// files under `Apps/zz-drop/...` with no extra subfolder.
+    /// A non-empty value adds one nested folder
+    /// (`Apps/zz-drop/{root_folder}/...`), preserved for
+    /// backward compatibility with profiles persisted before the
+    /// default flipped to empty.
     pub root_folder: String,
 
     /// Display-only — the email Dropbox returned from

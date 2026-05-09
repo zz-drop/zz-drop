@@ -38,13 +38,28 @@ pub use crate::providers::oauth_clients::DROPBOX_CLIENT_ID;
 pub const DROPBOX_AUTHORIZE_ENDPOINT: &str = "https://www.dropbox.com/oauth2/authorize";
 
 /// Token endpoint: used both for the initial code → tokens exchange
-/// and for refresh.
-pub const DROPBOX_TOKEN_ENDPOINT: &str = "https://www.dropbox.com/oauth2/token";
+/// and for refresh. Lives on the API host, NOT on `www.dropbox.com`
+/// — POSTing the form body to the user-facing host returns a 400
+/// with an HTML body, which our OAuth-error parser can't decode and
+/// the operator sees as a generic `server returned 400`. Verified
+/// 2026-05-09 with a probe POST against both hosts:
+/// `api.dropboxapi.com` → JSON OAuth response; `www.dropbox.com`
+/// → `Content-Type: text/html`.
+pub const DROPBOX_TOKEN_ENDPOINT: &str = "https://api.dropboxapi.com/oauth2/token";
 
-/// Default folder name created under the app's sandbox the first
-/// time zz-drop uploads. The user sees it under
-/// `Apps/zz-drop/zz-drop/`.
-pub const DROPBOX_DEFAULT_ROOT: &str = "zz-drop";
+/// Default value of [`DropboxProfile::root_folder`] for new profiles.
+/// Empty by design: the Dropbox app is registered as App-folder
+/// type, so the sandbox `Apps/zz-drop/` is already a dedicated
+/// folder — adding another `zz-drop` subfolder underneath would
+/// surface the user's files at `Apps/zz-drop/zz-drop/...`, which
+/// looks like a typo. Empty means the sandbox root is the
+/// destination, so files appear directly under `Apps/zz-drop/`.
+///
+/// Profiles written before this default flipped keep their literal
+/// `"zz-drop"` value and continue to write into the legacy
+/// subfolder layout — see [`super::rest::DropboxClient`] for the
+/// path build that handles both cases.
+pub const DROPBOX_DEFAULT_ROOT: &str = "";
 
 /// Documentation-only marker for the four delegated scopes wired in
 /// the App Console. The Dropbox authorize URL does **not** carry a
@@ -121,7 +136,9 @@ mod tests {
             .iter()
             .any(|(k, v)| *k == "token_access_type" && *v == "offline"));
         assert!(cfg.authorize_endpoint.starts_with("https://www.dropbox.com"));
-        assert!(cfg.token_endpoint.starts_with("https://www.dropbox.com"));
+        // Token endpoint must live on the API host — see the
+        // doc comment on DROPBOX_TOKEN_ENDPOINT.
+        assert!(cfg.token_endpoint.starts_with("https://api.dropboxapi.com"));
     }
 
     #[test]

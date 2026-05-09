@@ -47,13 +47,23 @@ useful when the registration is already minimal.
 
 The app is registered as **App folder** type. The Dropbox API
 operates on paths *relative to the app's sandbox*, e.g. the
-`/files/upload` endpoint with path `/zz-drop/notes.md` writes to
-the user-visible location `Apps/zz-drop/zz-drop/notes.md`. zz-drop
-never sees, lists, or touches anything outside the app folder.
+`/files/upload` endpoint with path `/notes.md` writes to the
+user-visible location `Apps/zz-drop/notes.md`. zz-drop never sees,
+lists, or touches anything outside the app folder.
 
 This is the smallest possible blast radius for a desktop OAuth
 client: a leaked or revoked token only exposes the app folder, not
 the user's whole Dropbox.
+
+Because the App-folder sandbox is already a dedicated directory
+(`Apps/zz-drop/`), the Dropbox profile's default `root_folder` is
+the **empty string**. We don't add a redundant nested `zz-drop/`
+underneath — that would surface user files as
+`Apps/zz-drop/zz-drop/notes.md`, which reads like a typo.
+Profiles persisted before this default flipped (with
+`root_folder = "zz-drop"`) keep working unchanged: the path build
+emits `/zz-drop/notes.md` and the user keeps seeing the legacy
+nested layout. New profiles emit `/notes.md` directly.
 
 ## Setup flow
 
@@ -92,22 +102,33 @@ Verified against the official Dropbox OAuth guide on 2026-05-09:
   with `client_id`, `response_type=code`, `code_challenge`,
   `code_challenge_method=S256`, `token_access_type=offline`.
 - Token exchange / refresh:
-  `https://www.dropbox.com/oauth2/token` with `code`,
+  `https://api.dropboxapi.com/oauth2/token` with `code`,
   `code_verifier`, `grant_type=authorization_code`, `client_id`
   for the initial exchange; `refresh_token`,
-  `grant_type=refresh_token`, `client_id` for refresh.
+  `grant_type=refresh_token`, `client_id` for refresh. (The
+  authorize endpoint lives on `www.dropbox.com`, the token
+  endpoint on `api.dropboxapi.com` — POSTing the token form to
+  the user-facing host returns a 400 with an HTML body.)
 
 ## Folder model
 
-zz-drop creates a single root folder under the app sandbox, named
-after `profile.root_folder` (default `zz-drop`). The user sees the
-same content under `Apps/zz-drop/zz-drop/`. Sub-paths are mirrored
-as nested folders.
+The user-visible folder for a fresh profile is `Apps/zz-drop/`
+itself — `profile.root_folder` defaults to the empty string and
+zz-drop writes directly into the App-folder sandbox. Sub-paths are
+mirrored as nested folders underneath.
 
-Path-addressing is direct: every `/files/*` endpoint takes a
-`path` field of the form `/<root_folder>/<…>`. Idempotent
-folder creation uses `POST /2/files/create_folder_v2`; a 409 with
-`path/conflict` is treated as success.
+A profile may set `root_folder` to a non-empty value (the legacy
+default was the literal `"zz-drop"`); in that case zz-drop creates
+that one extra subfolder and the user sees content under
+`Apps/zz-drop/<root_folder>/...`. The empty-default case skips the
+intermediate `create_folder_v2` call entirely — the App folder is
+already created automatically by Dropbox at consent time.
+
+Path-addressing is direct: with an empty `root_folder` every
+`/files/*` endpoint takes a `path` field of the form `/<…>`; with
+a non-empty `root_folder` the prefix is `/<root_folder>/<…>`.
+Idempotent folder creation uses `POST /2/files/create_folder_v2`;
+a 409 with `path/conflict` is treated as success.
 
 ## Upload format
 
