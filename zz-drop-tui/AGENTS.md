@@ -20,8 +20,15 @@ Before modifying anything in this repository, read:
 - `README.md` if present
 - `SECURITY.md` if present
 - `CONTRIBUTING.md` if present
-- relevant files under `docs/`
+- relevant files under `docs/` (especially `screens.md`,
+  `setup.md`, `login-flow.md`, `profile-passphrase.md`)
 - this `AGENTS.md`
+
+If you are touching colors, borders or any visual styling, also
+read `../zz-drop-private/DESIGN/brand/palette.md` (when available)
+— it is the single source of truth for the brand palette and
+mirrors the constants in `src/theme.rs` (`BG_0` / `MINT` / `CYAN`).
+Do not invent new accents.
 
 If the maintainer has provided additional project context for the
 session, follow it. If unsure, stop and ask the maintainer before
