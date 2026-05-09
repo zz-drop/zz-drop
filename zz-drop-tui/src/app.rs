@@ -1917,6 +1917,15 @@ impl App {
 
         // Editable input is gated to the AwaitingPaste stage.
         let editable = matches!(self.dropbox_setup.stage, DropboxSetupStage::AwaitingPaste);
+        // Single-letter shortcuts (q / i / c / o / u) only fire
+        // *before* the operator has started typing or pasting the
+        // code. After that, every printable char must reach the
+        // textbox — otherwise a code that happens to contain `q`
+        // (toggle QR), `c`, `o`, etc. would silently mutate the
+        // screen state instead of being entered. Once the field
+        // has any content, only Enter / Backspace / Esc / Ctrl-V
+        // are honoured, plus typing.
+        let action_keys_active = editable && self.dropbox_setup.pasted_code.value().is_empty();
 
         match key.code {
             KeyCode::Esc => {
@@ -1926,13 +1935,13 @@ impl App {
                 self.dropbox_request_email = false;
                 self.screen = Screen::Provider;
             }
-            KeyCode::Char('q') if editable => {
+            KeyCode::Char('q') if action_keys_active => {
                 self.dropbox_setup.show_qr = !self.dropbox_setup.show_qr;
             }
-            KeyCode::Char('i') if editable => {
+            KeyCode::Char('i') if action_keys_active => {
                 self.dropbox_setup.disable_inline_qr = !self.dropbox_setup.disable_inline_qr;
             }
-            KeyCode::Char('c') if editable => {
+            KeyCode::Char('c') if action_keys_active => {
                 let url = self.dropbox_setup.qr_url();
                 if !url.is_empty() {
                     let msg = match clipboard::copy_to_clipboard(url) {
@@ -1942,7 +1951,7 @@ impl App {
                     self.dropbox_setup.clipboard_message = Some(msg);
                 }
             }
-            KeyCode::Char('o') if editable => {
+            KeyCode::Char('o') if action_keys_active => {
                 let url = self.dropbox_setup.qr_url();
                 if !url.is_empty() {
                     let msg = match clipboard::open_in_browser(url) {
@@ -1952,7 +1961,7 @@ impl App {
                     self.dropbox_setup.browser_message = Some(msg);
                 }
             }
-            KeyCode::Char('u') if editable => {
+            KeyCode::Char('u') if action_keys_active => {
                 if !self.dropbox_setup.authorize_url.is_empty() {
                     self.dropbox_setup.show_url_modal = true;
                 }
@@ -2273,29 +2282,19 @@ impl App {
             KeyCode::Enter => match &self.state.last_test_outcome {
                 Some(TestOutcome::Ok) => {
                     // If we got here from ProfileManage (re-test),
-                    // Enter returns there. In the add-inner-profile
-                    // sub-flow the next step is InnerAlias (skip
-                    // the passphrase prompt — the container's KEK
-                    // is cached). For a *first* setup with an
-                    // OAuth provider the operator never typed an
-                    // alias, so route through InnerAlias too —
-                    // otherwise the local-part of the OAuth email
-                    // would silently become the container alias.
-                    // Nextcloud already collected an explicit
-                    // username in the auth screen; skip the prompt
-                    // there and go straight to the passphrase.
+                    // Enter returns there. Otherwise every flow —
+                    // first-profile setup *and* add-inner — routes
+                    // through InnerAlias so the operator always
+                    // gets to pick (or accept) an explicit alias.
+                    // Without this prompt the wizard silently
+                    // inherits a placeholder (Nextcloud username
+                    // or the OAuth email local-part) which the
+                    // operator never confirmed.
                     if let Some(back) = self.test_upload_back.take() {
                         self.screen = back;
-                    } else if self.wizard_mode == WizardMode::AddInnerProfile
-                        || matches!(
-                            self.state.provider_kind,
-                            ProviderKind::GoogleDrive | ProviderKind::OneDrive
-                        )
-                    {
+                    } else {
                         self.prepare_inner_alias_input();
                         self.screen = Screen::InnerAlias;
-                    } else {
-                        self.screen = self.screen.next();
                     }
                 }
                 // None (never run) or Failed → (re)run the probe.
@@ -3275,15 +3274,32 @@ mod tests {
     }
 
     #[test]
-    fn wizard_test_enter_on_ok_still_advances_to_passphrase() {
-        // The legacy wizard path is preserved: with no back pointer,
-        // Enter on a successful probe advances to ProfilePassphrase.
-        let mut app = App::new();
-        app.screen = Screen::TestUpload;
-        app.test_upload_back = None;
-        app.state.last_test_outcome = Some(TestOutcome::Ok);
-        app.on_key(key(KeyCode::Enter));
-        assert_eq!(app.screen, Screen::ProfilePassphrase);
+    fn wizard_test_enter_on_ok_routes_to_inner_alias_for_every_provider() {
+        // First-profile setup must always route through InnerAlias so
+        // the operator gets an explicit alias prompt regardless of
+        // provider — Nextcloud included. Without this, Nextcloud
+        // would inherit the WebDAV username verbatim and the OAuth
+        // providers would inherit the email local-part, both
+        // unconfirmed defaults.
+        for provider in [
+            ProviderKind::Nextcloud,
+            ProviderKind::GoogleDrive,
+            ProviderKind::OneDrive,
+            ProviderKind::Dropbox,
+        ] {
+            let mut app = App::new();
+            app.wizard_mode = WizardMode::CreateLocal;
+            app.state.provider_kind = provider;
+            app.screen = Screen::TestUpload;
+            app.test_upload_back = None;
+            app.state.last_test_outcome = Some(TestOutcome::Ok);
+            app.on_key(key(KeyCode::Enter));
+            assert_eq!(
+                app.screen,
+                Screen::InnerAlias,
+                "provider {provider:?} did not route to InnerAlias",
+            );
+        }
     }
 
     #[test]
@@ -3915,12 +3931,12 @@ mod tests {
     }
 
     #[test]
-    fn test_upload_enter_after_ok_advances_to_passphrase() {
+    fn test_upload_enter_after_ok_advances_to_inner_alias() {
         let mut app = App::new();
         app.screen = Screen::TestUpload;
         app.state.last_test_outcome = Some(TestOutcome::Ok);
         app.on_key(key(KeyCode::Enter));
-        assert_eq!(app.screen, Screen::ProfilePassphrase);
+        assert_eq!(app.screen, Screen::InnerAlias);
         assert!(!app.test_request);
     }
 

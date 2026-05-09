@@ -217,52 +217,36 @@ fn alias_suggestion_for_onedrive_uses_onedrive_prefix() {
     );
 }
 
-/// Regression guard for the alias-prompt routing fix: in a *first*
-/// container setup with an OAuth provider (Google Drive / OneDrive),
-/// pressing Enter on TestUpload must route to InnerAlias — not
-/// straight to ProfilePassphrase — so the operator can pick a
-/// readable alias instead of inheriting the local-part of the
-/// authenticated email address.
+/// Regression guard for the alias-prompt routing: in a *first*
+/// container setup, pressing Enter on TestUpload must route to
+/// InnerAlias — not straight to ProfilePassphrase — for every
+/// provider, so the operator gets a uniform chance to pick a
+/// readable alias. Originally this only fired for OAuth providers
+/// (where there was no other source for the alias); the unified
+/// rule extends it to Nextcloud too so the alias is no longer a
+/// silent inherit of the WebDAV username.
 #[test]
-fn first_setup_oauth_provider_routes_through_inner_alias() {
+fn first_setup_routes_through_inner_alias_for_every_provider() {
     use zz_drop_tui::wizard::{TestOutcome, WizardMode};
 
-    let mut app = App::new();
-    app.wizard_mode = WizardMode::CreateLocal;
-    app.state.provider_kind = ProviderKind::OneDrive;
-    app.state.last_test_outcome = Some(TestOutcome::Ok);
-    app.screen = Screen::TestUpload;
-    app.on_key(k(KeyCode::Enter));
-    assert_eq!(
-        app.screen,
-        Screen::InnerAlias,
-        "OneDrive first setup must show the alias prompt before passphrase"
-    );
-
-    // Same routing for Google Drive — coherent with the OneDrive
-    // arm and locks the OAuth pair.
-    let mut app = App::new();
-    app.wizard_mode = WizardMode::CreateLocal;
-    app.state.provider_kind = ProviderKind::GoogleDrive;
-    app.state.last_test_outcome = Some(TestOutcome::Ok);
-    app.screen = Screen::TestUpload;
-    app.on_key(k(KeyCode::Enter));
-    assert_eq!(app.screen, Screen::InnerAlias);
-
-    // Nextcloud keeps the original direct path: the username
-    // typed during auth already serves as the alias, no extra
-    // prompt needed.
-    let mut app = App::new();
-    app.wizard_mode = WizardMode::CreateLocal;
-    app.state.provider_kind = ProviderKind::Nextcloud;
-    app.state.last_test_outcome = Some(TestOutcome::Ok);
-    app.screen = Screen::TestUpload;
-    app.on_key(k(KeyCode::Enter));
-    assert_eq!(
-        app.screen,
-        Screen::ProfilePassphrase,
-        "Nextcloud first setup must not insert an extra alias prompt"
-    );
+    for provider in [
+        ProviderKind::Nextcloud,
+        ProviderKind::GoogleDrive,
+        ProviderKind::OneDrive,
+        ProviderKind::Dropbox,
+    ] {
+        let mut app = App::new();
+        app.wizard_mode = WizardMode::CreateLocal;
+        app.state.provider_kind = provider;
+        app.state.last_test_outcome = Some(TestOutcome::Ok);
+        app.screen = Screen::TestUpload;
+        app.on_key(k(KeyCode::Enter));
+        assert_eq!(
+            app.screen,
+            Screen::InnerAlias,
+            "{provider:?} first setup must show the alias prompt before passphrase",
+        );
+    }
 }
 
 /// Reproduce the user-reported "wrong passphrase" against a
