@@ -133,6 +133,72 @@ zz f                    # doctor: state probe, missing pieces
 zz <TAB>                # dropdown should show verbs and atomics
 ```
 
+## Building with your own OAuth client IDs
+
+zz-drop's default builds embed public OAuth `client_id` values
+(and, for Google Drive, the matching `client_secret`) registered
+to the upstream `zz-drop` apps on each cloud provider. Per the
+OAuth spec these values are **published metadata**, not secrets,
+so embedding them in the binary is safe — exactly the pattern
+[rclone](https://rclone.org) uses with its own defaults.
+
+Power users who run their own fork *should* register their own
+OAuth apps on each provider they care about and rebuild zz-drop
+with their own values. The two reasons mirror rclone's "Making
+your own client_id" guidance:
+
+- **Rate limits.** Each upstream service rate-limits per OAuth
+  app, *not* per user. The default `zz-drop` apps are shared by
+  every zz-drop user, so heavy users contend for the same global
+  quota. With your own app, you get your own quota.
+- **Branding.** The consent screen the user sees in the browser
+  shows the app name registered upstream (`zz-drop` for the
+  defaults). A fork that wants a different name on the consent
+  page registers its own app.
+
+### How to override
+
+Each `client_id` resolves through `option_env!`, so setting the
+matching environment variable at `cargo build` time bakes the
+override into the binary. No source-code edit, no patch:
+
+```sh
+ZZ_DROP_GDRIVE_CLIENT_ID="…apps.googleusercontent.com" \
+ZZ_DROP_GDRIVE_CLIENT_SECRET="GOCSPX-…" \
+ZZ_DROP_ONEDRIVE_CLIENT_ID="…" \
+ZZ_DROP_DROPBOX_CLIENT_ID="…" \
+( cd "$ZZ_HOME/zz-drop"     && cargo build --release )
+( cd "$ZZ_HOME/zz-drop-tui" && cargo build --release ) 2>/dev/null
+```
+
+Set only the variables for the providers you actually use; any
+unset variable keeps the upstream zz-drop default.
+
+| Variable                              | Provider     | Where to register the app |
+| ------------------------------------- | ------------ | ------------------------- |
+| `ZZ_DROP_GDRIVE_CLIENT_ID`            | Google Drive | https://console.cloud.google.com/ — OAuth client type "TVs and Limited Input devices" |
+| `ZZ_DROP_GDRIVE_CLIENT_SECRET`        | Google Drive | Issued together with the client ID by the same console; embed it (Google's installed-app contract treats it as published metadata) |
+| `ZZ_DROP_ONEDRIVE_CLIENT_ID`          | OneDrive     | https://entra.microsoft.com/ — Azure AD app, multi-tenant + personal accounts, "Allow public client flows" enabled, no client secret |
+| `ZZ_DROP_DROPBOX_CLIENT_ID`           | Dropbox      | https://www.dropbox.com/developers/apps — "Scoped access", App folder, PKCE enabled, no client secret |
+
+Verify the override took effect:
+
+```sh
+strings ./target/release/zz-tui | grep -F "$ZZ_DROP_DROPBOX_CLIENT_ID"
+```
+
+If the variable was set at build time, the matching string is in
+the binary; if it was unset, the upstream zz-drop default is.
+
+### When *not* to override
+
+For day-to-day personal use against your own Google / Microsoft /
+Dropbox account, the defaults are fine. The upstream apps grant
+zz-drop the minimum scopes (file content + read account email
+for the display label) and store nothing on the maintainer's
+side. Override only when (a) you're the operator of a fork, or
+(b) you've outgrown the shared rate-limit ceiling.
+
 ## Update
 
 ```sh

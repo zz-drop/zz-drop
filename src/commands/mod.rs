@@ -20,11 +20,12 @@ use crate::cli::Command;
 use crate::color::ColorPolicy;
 use crate::config;
 use crate::output;
+use zz_drop_core::providers::dropbox::DropboxClient;
 use zz_drop_core::providers::google_drive::GoogleDriveClient;
 use zz_drop_core::providers::nextcloud::NextcloudClient;
 use zz_drop_core::providers::onedrive::OneDriveClient;
 
-use remote_fs::{AnyRemote, GoogleDriveRemoteFs, NextcloudRemoteFs, OneDriveRemoteFs};
+use remote_fs::{AnyRemote, DropboxRemoteFs, GoogleDriveRemoteFs, NextcloudRemoteFs, OneDriveRemoteFs};
 
 pub const EXIT_OK: i32 = 0;
 pub const EXIT_USAGE: i32 = 2;
@@ -309,6 +310,11 @@ pub(crate) fn build_remote(profile: &PlainProfile) -> Result<AnyRemote, &'static
             let client = OneDriveClient::from_profile(od.clone())
                 .map_err(|e| zz_drop_core::providers::onedrive::diagnose(&e))?;
             Ok(AnyRemote::OneDrive(OneDriveRemoteFs::new(client)))
+        }
+        ProviderProfile::Dropbox(db) => {
+            let client = DropboxClient::from_profile(db.clone())
+                .map_err(|e| zz_drop_core::providers::dropbox::diagnose(&e))?;
+            Ok(AnyRemote::Dropbox(DropboxRemoteFs::new(client)))
         }
     }
 }

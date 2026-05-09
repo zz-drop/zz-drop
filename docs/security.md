@@ -7,11 +7,13 @@ not absolutes.
 
 ## Threat model in one sentence
 
-The cloud provider (Nextcloud over WebDAV, Google Drive over OAuth,
-others as they land) and any zz-drop API server (`zz-drop.net` or
-self-hosted, gated behind the `remote` Cargo feature in v1) **must
-not** be able to read the decrypted container, the container
-passphrase, or the per-provider credentials inside. The local
+The cloud provider (Nextcloud over WebDAV, Google Drive over OAuth
+device flow, OneDrive over OAuth device flow, Dropbox over OAuth
+paste-code + PKCE, others as they land) and any zz-drop API server
+(`zz-drop.net` or self-hosted, gated behind the `remote` Cargo
+feature in v1) **must not** be able to read the decrypted
+container, the container passphrase, or the per-provider
+credentials inside. The local
 user's account on their own machine is trusted: zz-drop does not
 defend against another process running under your UID.
 

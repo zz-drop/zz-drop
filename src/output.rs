@@ -109,6 +109,14 @@ pub fn profile_target(profile: &PlainProfile) -> String {
                 format!("onedrive/{root}")
             }
         }
+        Some(ProviderProfile::Dropbox(db)) => {
+            let root = db.root_folder.trim_matches('/');
+            if root.is_empty() {
+                "dropbox".to_string()
+            } else {
+                format!("dropbox/{root}")
+            }
+        }
         None => "—".to_string(),
     }
 }

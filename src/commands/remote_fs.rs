@@ -6,6 +6,9 @@ use thiserror::Error;
 use zz_drop_core::providers::ProviderProfile;
 use zz_drop_core::CollisionPolicy;
 
+use zz_drop_core::providers::dropbox::{
+    DropboxClient, DropboxError, diagnose as dropbox_diagnose,
+};
 use zz_drop_core::providers::google_drive::{
     GoogleDriveClient, GoogleDriveError, diagnose as gdrive_diagnose,
 };
@@ -51,6 +54,12 @@ impl From<GoogleDriveError> for RemoteError {
 impl From<OneDriveError> for RemoteError {
     fn from(value: OneDriveError) -> Self {
         Self::Diagnostic(onedrive_diagnose(&value))
+    }
+}
+
+impl From<DropboxError> for RemoteError {
+    fn from(value: DropboxError) -> Self {
+        Self::Diagnostic(dropbox_diagnose(&value))
     }
 }
 
@@ -179,6 +188,49 @@ impl RemoteFs for OneDriveRemoteFs {
     }
 }
 
+/// `RemoteFs` impl backed by a real Dropbox client.
+pub struct DropboxRemoteFs {
+    inner: DropboxClient,
+}
+
+impl DropboxRemoteFs {
+    pub fn new(client: DropboxClient) -> Self {
+        Self { inner: client }
+    }
+
+    pub fn dirty(&self) -> bool {
+        self.inner.dirty()
+    }
+
+    pub fn current_provider(&self) -> ProviderProfile {
+        ProviderProfile::Dropbox(self.inner.current_profile())
+    }
+}
+
+impl RemoteFs for DropboxRemoteFs {
+    fn ensure_dir(&self, segments: &[&str]) -> Result<(), RemoteError> {
+        self.inner.ensure_dir_segments(segments)?;
+        Ok(())
+    }
+
+    fn upload(
+        &self,
+        local: &Path,
+        segments: &[&str],
+        policy: CollisionPolicy,
+    ) -> Result<UploadOutcome, RemoteError> {
+        Ok(self.inner.upload_to(local, segments, policy)?)
+    }
+
+    fn download(&self, segments: &[&str], dest: &Path) -> Result<u64, RemoteError> {
+        Ok(self.inner.download_from(segments, dest)?)
+    }
+
+    fn list(&self, segments: &[&str]) -> Result<Vec<RemoteEntry>, RemoteError> {
+        Ok(self.inner.list_at(segments)?)
+    }
+}
+
 /// Provider-agnostic wrapper used by the CLI dispatcher. The
 /// [`RemoteFs`] impl forwards to whichever concrete client matches
 /// the active profile, so all upload/download/list/wipe code stays
@@ -187,6 +239,7 @@ pub enum AnyRemote {
     Nextcloud(NextcloudRemoteFs),
     GoogleDrive(GoogleDriveRemoteFs),
     OneDrive(OneDriveRemoteFs),
+    Dropbox(DropboxRemoteFs),
 }
 
 impl AnyRemote {
@@ -214,6 +267,13 @@ impl AnyRemote {
                     None
                 }
             }
+            Self::Dropbox(d) => {
+                if d.dirty() {
+                    Some(d.current_provider())
+                } else {
+                    None
+                }
+            }
         }
     }
 }
@@ -224,6 +284,7 @@ impl RemoteFs for AnyRemote {
             Self::Nextcloud(r) => r.ensure_dir(segments),
             Self::GoogleDrive(r) => r.ensure_dir(segments),
             Self::OneDrive(r) => r.ensure_dir(segments),
+            Self::Dropbox(r) => r.ensure_dir(segments),
         }
     }
 
@@ -237,6 +298,7 @@ impl RemoteFs for AnyRemote {
             Self::Nextcloud(r) => r.upload(local, segments, policy),
             Self::GoogleDrive(r) => r.upload(local, segments, policy),
             Self::OneDrive(r) => r.upload(local, segments, policy),
+            Self::Dropbox(r) => r.upload(local, segments, policy),
         }
     }
 
@@ -245,6 +307,7 @@ impl RemoteFs for AnyRemote {
             Self::Nextcloud(r) => r.download(segments, dest),
             Self::GoogleDrive(r) => r.download(segments, dest),
             Self::OneDrive(r) => r.download(segments, dest),
+            Self::Dropbox(r) => r.download(segments, dest),
         }
     }
 
@@ -253,6 +316,7 @@ impl RemoteFs for AnyRemote {
             Self::Nextcloud(r) => r.list(segments),
             Self::GoogleDrive(r) => r.list(segments),
             Self::OneDrive(r) => r.list(segments),
+            Self::Dropbox(r) => r.list(segments),
         }
     }
 }

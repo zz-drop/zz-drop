@@ -182,6 +182,7 @@ fn describe_providers(providers: &[ProviderProfile]) -> String {
             ProviderProfile::Nextcloud(_) => "nextcloud",
             ProviderProfile::GoogleDrive(_) => "google-drive",
             ProviderProfile::OneDrive(_) => "onedrive",
+            ProviderProfile::Dropbox(_) => "dropbox",
         };
         parts.push(label.to_string());
     }

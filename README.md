@@ -19,8 +19,10 @@ local machine to a configured cloud target.
 Pre-alpha. v1 ships **local-only** by default — see "v1 ships
 local-only" below for what that means and how to opt in to the
 remote surface. Daily commands `zz <file>`, `zz d`,
-`zz z`, `zz q`, `zz w` are operational against either
-**Nextcloud** (WebDAV) or **Google Drive** (OAuth device flow).
+`zz z`, `zz q`, `zz w` are operational against
+**Nextcloud** (WebDAV), **Google Drive** (OAuth device flow),
+**OneDrive** (OAuth device flow, Microsoft Graph), or **Dropbox**
+(OAuth paste-code + PKCE, App folder).
 Profiles live inside an encrypted *container* (`profiles-local.zz`)
 that can hold many inner profiles; `zz z` unlocks the container
 into the local agent and prompts a numbered picker when the
@@ -42,6 +44,29 @@ cargo build --profile dist --bin zz-drop
 `dist` enables `opt-level=z`, full LTO, single codegen unit, symbol
 stripping and `panic=abort`. Day-to-day work and CI should stay on
 `cargo build --release` (~3× faster compile, slightly larger binary).
+
+### Building with your own OAuth client IDs
+
+The default build embeds public OAuth `client_id` values (and, for
+Google Drive, the matching `client_secret`) registered to the
+upstream `zz-drop` apps. They are public per the OAuth spec, the
+same way [rclone](https://rclone.org) ships its own defaults. Forks
+that want their own consent-screen branding, or power users who've
+hit the shared per-app rate limits on Google / OneDrive / Dropbox,
+can override every value at `cargo build` time without touching the
+source:
+
+```bash
+ZZ_DROP_GDRIVE_CLIENT_ID="…apps.googleusercontent.com" \
+ZZ_DROP_GDRIVE_CLIENT_SECRET="GOCSPX-…" \
+ZZ_DROP_ONEDRIVE_CLIENT_ID="…" \
+ZZ_DROP_DROPBOX_CLIENT_ID="…" \
+cargo build --release
+```
+
+Any variable left unset keeps the upstream zz-drop default. Full
+table of variables, where to register each app, and a `strings`-based
+verification step are in [`docs/build.md`](./docs/build.md).
 
 ## Quickstart
 
