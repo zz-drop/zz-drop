@@ -15,7 +15,24 @@ fn current_uid_is_real() {
 
 #[test]
 fn discover_resolves_filenames() {
+    // This test only inspects the *composition* of the resolved
+    // paths (filenames + that the dir contains "zz-drop"). It does
+    // NOT write to the resolved files. The defensive guard in
+    // `discover_paths` would otherwise refuse the call to keep
+    // tests from clobbering the user's real container; the
+    // documented bypass env var disables it for read-only
+    // assertions like this one.
+    //
+    // SAFETY: integration tests run single-threaded by default and
+    // we set+remove the variable around a single synchronous call,
+    // so no other thread observes the env mutation.
+    unsafe {
+        std::env::set_var("ZZ_DROP_TEST_ALLOW_REAL_CONFIG", "1");
+    }
     let paths = discover().unwrap();
+    unsafe {
+        std::env::remove_var("ZZ_DROP_TEST_ALLOW_REAL_CONFIG");
+    }
 
     assert_eq!(paths.config_file.file_name().unwrap(), "config.toml");
     assert_eq!(
