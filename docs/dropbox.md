@@ -46,28 +46,31 @@ Press **Enter** to exchange the code for tokens.
 zz-drop then fetches your account email and asks for the local
 profile passphrase.
 
-The folder name defaults to `zz-drop` (relative to the app's
-sandbox). Change it before saving the profile if you want a
-different name — Dropbox will create the folder on the first
-upload, visible to you under
-`Apps/zz-drop/<folder>/`.
+The destination folder for new profiles is the app's sandbox
+itself — `Apps/zz-drop/`. zz-drop does not create an extra
+nested subfolder underneath, because the App-folder access type
+already gives the app a dedicated directory: stacking another
+`zz-drop/` inside would surface as `Apps/zz-drop/zz-drop/...`,
+which reads like a typo. Profiles created before this default
+flipped keep their literal `zz-drop/` subfolder for backward
+compatibility.
 
 ## Daily use
 
 ```
-zz file.md          # upload to Apps/zz-drop/<root>/file.md
-zz d file.md        # download Apps/zz-drop/<root>/file.md to ./
+zz file.md          # upload to Apps/zz-drop/file.md
+zz d file.md        # download Apps/zz-drop/file.md to ./
 ```
 
 The output line shows the alias and a compact target string:
 
 ```
-file.md uploaded · personal · dropbox/zz-drop
+file.md uploaded · personal · dropbox
 ```
 
-`dropbox/zz-drop` means the file went to the `zz-drop` folder
-inside the app's Dropbox sandbox. Your Dropbox UI shows the same
-file under `Apps/zz-drop/zz-drop/file.md`.
+`dropbox` means the file went to the app's Dropbox sandbox root.
+Your Dropbox UI shows the same file under
+`Apps/zz-drop/file.md`.
 
 ## What zz-drop can and cannot see
 
