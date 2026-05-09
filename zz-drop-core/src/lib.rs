@@ -23,6 +23,7 @@ pub use profile::{
     encrypt_profile_with_config, encrypt_set, encrypt_set_with_config, encrypt_set_with_kek,
     load_set_zz, save_set_zz, save_set_zz_with_config,
 };
+pub use providers::dropbox::{DropboxAuth, DropboxProfile};
 pub use providers::google_drive::{GoogleDriveAuth, GoogleDriveProfile};
 pub use providers::nextcloud::{NextcloudAuth, NextcloudProfile};
 pub use providers::onedrive::{OneDriveAuth, OneDriveProfile};

@@ -22,16 +22,15 @@ pub use errors::{OneDriveError, diagnose};
 pub use rest::OneDriveClient;
 pub use types::{EXPIRY_SKEW_SECS, OneDriveAuth, OneDriveProfile};
 
-/// OAuth Application (client) ID assigned to zz-drop in the
-/// Microsoft Entra admin center. Public per OAuth spec — the
-/// device-flow contract treats public-client IDs as published
-/// metadata, exactly as Google Drive does for its desktop client.
-///
-/// The app must have "Allow public client flows" enabled in
-/// Authentication settings, and the API permissions must include
-/// `Files.ReadWrite`, `offline_access` and `User.Read` (delegated,
-/// admin consent NOT required for personal accounts).
-pub const ONEDRIVE_CLIENT_ID: &str = "586fdfce-2441-4cf6-ace5-39bf2489871d";
+// `ONEDRIVE_CLIENT_ID` is defined once, alongside every other
+// provider's identifier, in `crate::providers::oauth_clients`.
+// Re-exported here so existing
+// `use zz_drop_core::providers::onedrive::ONEDRIVE_CLIENT_ID`
+// call sites stay valid. See `oauth_clients` for the build-time
+// override env var contract and the app-registration prerequisites
+// (multi-tenant + personal accounts, "Allow public client flows"
+// on, the three delegated scopes listed below).
+pub use crate::providers::oauth_clients::ONEDRIVE_CLIENT_ID;
 
 /// Tenant path. `/common` accepts both personal Microsoft accounts
 /// and work/school accounts; `/consumers` would lock the app to

@@ -1,11 +1,14 @@
+pub mod dropbox;
 pub mod google_drive;
 pub mod nextcloud;
 pub mod oauth;
+pub mod oauth_clients;
 pub mod onedrive;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub use dropbox::{DropboxAuth, DropboxProfile};
 pub use google_drive::{GoogleDriveAuth, GoogleDriveProfile};
 pub use nextcloud::{NextcloudAuth, NextcloudProfile};
 pub use onedrive::{OneDriveAuth, OneDriveProfile};
@@ -16,6 +19,7 @@ pub enum ProviderProfile {
     Nextcloud(NextcloudProfile),
     GoogleDrive(GoogleDriveProfile),
     OneDrive(OneDriveProfile),
+    Dropbox(DropboxProfile),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,4 +46,7 @@ pub enum ProviderError {
 
     #[error("onedrive: {0}")]
     OneDrive(#[from] onedrive::OneDriveError),
+
+    #[error("dropbox: {0}")]
+    Dropbox(#[from] dropbox::DropboxError),
 }

@@ -18,23 +18,13 @@ pub use errors::{GoogleDriveError, diagnose};
 pub use rest::GoogleDriveClient;
 pub use types::{EXPIRY_SKEW_SECS, GoogleDriveAuth, GoogleDriveProfile};
 
-/// OAuth client identifier registered for zz-drop on Google Cloud
-/// Console as "TVs and Limited Input devices". Public per OAuth spec.
-/// Split with `concat!` so GitHub's secret-scanning regexes don't
-/// flag the literal at push time — runtime value is identical to a
-/// single string literal.
-pub const GDRIVE_CLIENT_ID: &str = concat!(
-    "499388241333-73ipjnlcpeg6odrcp505jqn9hmfpv807",
-    ".",
-    "apps.googleusercontent.com",
-);
-
-/// Companion "client_secret" for the installed-app client type. Per
-/// Google's own guidance for installed apps, this is not treated as
-/// a real secret and is intended to be embedded in the binary. Same
-/// `concat!` trick as `GDRIVE_CLIENT_ID` to keep the secret-scanner
-/// quiet without changing the runtime value.
-pub const GDRIVE_CLIENT_SECRET: &str = concat!("GOCSPX", "-", "n9gOCLKxUe2tjMxJUrYYxfoFgt7A");
+// `GDRIVE_CLIENT_ID` and `GDRIVE_CLIENT_SECRET` are defined once,
+// alongside every other provider's identifier, in
+// `crate::providers::oauth_clients`. Re-exported here so existing
+// `use zz_drop_core::providers::google_drive::GDRIVE_CLIENT_ID`
+// call sites stay valid. See `oauth_clients` for the build-time
+// override env var contract.
+pub use crate::providers::oauth_clients::{GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET};
 
 /// Minimum scope that lets zz-drop create, read, update and delete
 /// only the files it created. The user's other Drive content stays

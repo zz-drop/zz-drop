@@ -1,8 +1,8 @@
 use zz_drop_core::agent_proto::KekPayload;
 use zz_drop_core::{
-    AgentError, AgentRequest, AgentResponse, Argon2idConfig, CollisionPolicy, NextcloudAuth,
-    NextcloudProfile, PROTOCOL_VERSION, PlainProfile, ProfileSet, ProfileSettings,
-    ProviderProfile,
+    AgentError, AgentRequest, AgentResponse, Argon2idConfig, CollisionPolicy, DropboxAuth,
+    DropboxProfile, NextcloudAuth, NextcloudProfile, PROTOCOL_VERSION, PlainProfile, ProfileSet,
+    ProfileSettings, ProviderProfile,
 };
 
 fn sample_kek_payload() -> KekPayload {
@@ -205,5 +205,60 @@ fn debug_redacts_agent_response_profile() {
     assert!(
         !formatted.contains("topsecret"),
         "AgentResponse::Profile Debug must redact profile secret: got `{formatted}`"
+    );
+}
+
+fn sample_dropbox_profile() -> PlainProfile {
+    PlainProfile {
+        profile_version: 1,
+        profile_id: "p-0042".into(),
+        alias: "dropbox-amber-brook-42".into(),
+        default_target: "dropbox-1".into(),
+        providers: vec![ProviderProfile::Dropbox(DropboxProfile {
+            root_folder: "zz-drop".into(),
+            user_email: "alice@example.com".into(),
+            auth: DropboxAuth {
+                access_token: "AT-DROPBOX-CANARY".into(),
+                refresh_token: "RT-DROPBOX-CANARY".into(),
+                token_type: "bearer".into(),
+                expires_at: 9_999_999_999,
+                scope: "files.content.write files.content.read files.metadata.read account_info.read".into(),
+            },
+        })],
+        collision_policy: CollisionPolicy::Rename,
+        settings: ProfileSettings::default(),
+        created_at: "2026-05-09T22:00:00Z".into(),
+        updated_at: "2026-05-09T22:00:00Z".into(),
+    }
+}
+
+#[test]
+fn plain_profile_dropbox_roundtrip() {
+    let original = sample_dropbox_profile();
+    let json = serde_json::to_string(&original).unwrap();
+    let restored: PlainProfile = serde_json::from_str(&json).unwrap();
+    let json2 = serde_json::to_string(&restored).unwrap();
+    assert_eq!(json, json2);
+    assert!(original == restored);
+    // Variant tag uses snake_case ("dropbox") per the existing
+    // ProviderProfile serde rename rule.
+    assert!(json.contains("\"dropbox\""));
+}
+
+#[test]
+fn debug_redacts_dropbox_profile() {
+    let profile = sample_dropbox_profile();
+    let formatted = format!("{profile:?}");
+    assert!(
+        !formatted.contains("AT-DROPBOX-CANARY"),
+        "PlainProfile Debug must redact Dropbox access_token: got `{formatted}`"
+    );
+    assert!(
+        !formatted.contains("RT-DROPBOX-CANARY"),
+        "PlainProfile Debug must redact Dropbox refresh_token: got `{formatted}`"
+    );
+    assert!(
+        !formatted.contains("alice@example.com"),
+        "PlainProfile Debug must redact Dropbox user email: got `{formatted}`"
     );
 }
