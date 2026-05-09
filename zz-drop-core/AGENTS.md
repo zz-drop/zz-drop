@@ -97,6 +97,30 @@ Never log:
 
 The server must never see decrypted profile data or provider metadata.
 
+## OAuth client identifiers — single source of truth
+
+Every public OAuth `client_id` (and the rare embedded `client_secret`,
+for installed-app clients that include one) lives in
+**`src/providers/oauth_clients.rs`**. Provider modules under
+`src/providers/<name>/` *re-export* the constant from there; they
+must never define their own `pub const FOO_CLIENT_ID`.
+
+When adding a new OAuth-driven provider:
+
+1. Add the new identifier(s) to `oauth_clients.rs`, wrapped in
+   `match option_env!("ZZ_DROP_<PROVIDER>_CLIENT_ID")` so a forker
+   can override at `cargo build` time without editing source.
+2. Re-export the constant from the provider module:
+   `pub use crate::providers::oauth_clients::<PROVIDER>_CLIENT_ID;`.
+3. Update the override-variable table in the file header *and* in
+   `zz-drop/docs/build.md` (the user-facing companion).
+4. Add a non-empty / shape sanity test mirroring the existing ones
+   so a missing or malformed override fails CI loudly.
+
+This single-file rule is intentional: it lets reviewers grep one
+file, lets forks override every value via build-time env vars, and
+prevents accidental drift between provider modules.
+
 ## Documentation rule
 
 If behavior changes, update docs in the same change.
