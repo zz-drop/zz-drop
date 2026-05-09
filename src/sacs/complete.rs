@@ -375,6 +375,33 @@ fn ready_after_s(
         1,
         false,
     );
+    // Local directories with trailing `/` so the operator can
+    // descend a level (`zz s a.md Documents/<TAB>` lists files
+    // inside `Documents/`). Without these the second-arg dropdown
+    // shows only top-level files plus remote destinations, and
+    // there's no way to add a source from a subdirectory short of
+    // typing the path by hand. Ranked between local files (1..)
+    // and remote-dest dirs (50..).
+    let mut local_dirs = collect_local(cwd, cur, EntryFilter::DirsOnly);
+    local_dirs.sort_by_key(|e| (Reverse(e.mtime), e.name.clone()));
+    let local_dir_total = local_dirs.len();
+    for (i, e) in local_dirs.iter().take(LOCAL_CANDIDATE_LIMIT).enumerate() {
+        let value = format!("{}/", e.name);
+        out.push(Candidate {
+            value: value.clone(),
+            display: format!("zz {value}"),
+            description: String::new(),
+            kind: Kind::DirLocal,
+            rank: 25 + (i as u32),
+        });
+    }
+    if local_dir_total > LOCAL_CANDIDATE_LIMIT {
+        out.push(footer(
+            local_dir_total - LOCAL_CANDIDATE_LIMIT,
+            local_dir_total,
+            "directories",
+        ));
+    }
     out.extend(rank_remote_dirs(
         try_list_remote(source, parent_for_remote_prefix(cur), EntryKindFilter::Directory),
         verb,
@@ -1337,6 +1364,11 @@ mod tests {
             Some(&mut src),
         );
         assert!(r.iter().any(|c| matches!(c.kind, Kind::FileLocal)));
+        // Local dirs surface for navigation (`zz s file1.md Documents/`
+        // descends into Documents/ on the next TAB). Without these
+        // the operator can't reach files in subdirectories without
+        // typing the path by hand.
+        assert!(r.iter().any(|c| matches!(c.kind, Kind::DirLocal)));
         assert!(r.iter().any(|c| matches!(c.kind, Kind::DirRemote)));
         // dir_remote candidates have empty descriptions in v1
         // (so zsh packs them into a multi-column grid below the

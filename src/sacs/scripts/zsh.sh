@@ -78,13 +78,45 @@ _zz_complete() {
         esac
     done < <("$bin" __complete "${args[@]}" 2>/dev/null)
 
+    # Files/verbs/atomics use `_describe` so the description string
+    # appears next to each row and the section header inherits the
+    # operator's `:descriptions` format. Directories use `compadd`
+    # directly: the values already end with `/`, and `-S ''`
+    # suppresses zsh's default trailing-space suffix so a follow-up
+    # TAB can descend into the directory without a backspace.
+    # Trying to pass `-- -S ''` through `_describe` triggered
+    # `compdescribe: invalid argument` in some zsh 5.x builds, so
+    # the dir branches are split off.
     (( ${#remote_files} )) && _describe -t remote-files 'remote file'    remote_files
-    (( ${#remote_dirs}  )) && _describe -t remote-dirs  'remote dir'     remote_dirs
     (( ${#local_files}  )) && _describe -t local-files  'local file'     local_files
-    (( ${#local_dirs}   )) && _describe -t local-dirs   'local dir'      local_dirs
     (( ${#verbs}        )) && _describe -t verbs        'verb'           verbs
     (( ${#atomics}      )) && _describe -t atomics      'atomic command' atomics
     (( ${#help_entries} )) && _describe -t help         'help'           help_entries
+
+    # `_description` runs the operator's `:descriptions` zstyle
+    # against the section header (so "[local dir]" gets the cyan
+    # bracket format defined for the (zz|zz-drop) context, same as
+    # the headers `_describe` produces). `compadd -S ''` then
+    # suppresses zsh's default trailing-space suffix so a follow-up
+    # TAB can descend into the directory without a backspace.
+    if (( ${#local_dirs} )); then
+        local -a _local_dir_values=() _expl
+        local _d
+        for _d in "${local_dirs[@]}"; do
+            _local_dir_values+=("${_d%%:*}")
+        done
+        _description local-dirs _expl 'local dir'
+        compadd "${_expl[@]}" -S '' -a _local_dir_values
+    fi
+    if (( ${#remote_dirs} )); then
+        local -a _remote_dir_values=() _expl
+        local _d
+        for _d in "${remote_dirs[@]}"; do
+            _remote_dir_values+=("${_d%%:*}")
+        done
+        _description remote-dirs _expl 'remote dir'
+        compadd "${_expl[@]}" -S '' -a _remote_dir_values
+    fi
 }
 
 _zz_complete "$@"
