@@ -86,6 +86,35 @@ pub enum PathError {
 }
 
 pub fn discover_paths(uid: u32, overrides: &PathOverrides) -> Result<Paths, PathError> {
+    // Defensive guard: when the calling binary lives inside a
+    // `target/{debug,release}/deps/` directory it is a Cargo
+    // integration-test binary, *not* a production build. Such a
+    // binary must always pass an explicit `overrides.config_dir`
+    // pointing at a `tempdir` so the test cannot clobber the
+    // operator's real `profiles-local.zz`.
+    //
+    // Reason this exists: `directories` ignores `XDG_CONFIG_HOME`
+    // on macOS and falls back to `~/Library/Application Support/`,
+    // so the previous "set XDG_CONFIG_HOME in tests" pattern was
+    // a no-op there and silently overwrote real user containers
+    // during `cargo test`. The guard converts a silent footgun
+    // into a loud test failure.
+    //
+    // Production binaries (`zz-drop`, `zz-tui`, `zz-agent`) live
+    // at `target/{debug,release}/<name>` (no `/deps/` segment),
+    // so they bypass this branch and behave normally.
+    if overrides.config_dir.is_none()
+        && std::env::var_os("ZZ_DROP_TEST_ALLOW_REAL_CONFIG").is_none()
+        && running_under_cargo_test()
+    {
+        return Err(PathError::Io(
+            "discover_paths called without config_dir override from a test binary; \
+             tests must use an explicit tempdir to avoid clobbering the user's \
+             profiles-local.zz (set ZZ_DROP_TEST_ALLOW_REAL_CONFIG=1 to bypass)"
+                .into(),
+        ));
+    }
+
     let base = directories::BaseDirs::new().ok_or(PathError::NoBaseDirs)?;
 
     let config_dir = match &overrides.config_dir {
@@ -124,6 +153,20 @@ pub fn discover_paths(uid: u32, overrides: &PathOverrides) -> Result<Paths, Path
         agent_socket,
         token_file,
     })
+}
+
+/// True when the current process executable path looks like a
+/// Cargo test binary (`.../target/<profile>/deps/<hash>`). Cheap
+/// heuristic — production binaries live one level up at
+/// `target/<profile>/<binary>`, so they don't match.
+fn running_under_cargo_test() -> bool {
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+    let s = exe.to_string_lossy();
+    // Match `/target/...` AND `/deps/` to avoid false positives on
+    // unrelated paths that happen to contain "deps".
+    s.contains("/target/") && s.contains("/deps/")
 }
 
 #[cfg(unix)]
@@ -174,6 +217,27 @@ mod tests {
         );
         assert_eq!(paths.agent_socket, runtime.join("agent.sock"));
         assert_eq!(paths.token_file, runtime.join("token"));
+    }
+
+    /// Regression guard: a test binary that calls `discover_paths`
+    /// without supplying `config_dir` must fail loudly. Historically
+    /// the previous "set XDG_CONFIG_HOME" pattern silently overwrote
+    /// the maintainer's real `~/Library/Application Support/zz-drop/
+    /// profiles-local.zz` on macOS, because `directories` ignores
+    /// XDG on that platform. This test verifies the guard is wired.
+    #[test]
+    fn discover_paths_refuses_default_overrides_inside_test_binary() {
+        let result = discover_paths(0, &PathOverrides::default());
+        match result {
+            Err(PathError::Io(msg)) => {
+                assert!(
+                    msg.contains("test binary"),
+                    "guard message should mention 'test binary', got: {msg}"
+                );
+            }
+            Err(other) => panic!("expected Io guard, got {other:?}"),
+            Ok(_) => panic!("guard should reject default overrides inside cargo test"),
+        }
     }
 
     #[test]
