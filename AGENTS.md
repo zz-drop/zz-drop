@@ -34,13 +34,16 @@ when available) and the **local per-user agent**, in the same binary.
 
 It contains:
 
-- command parser
+- command parser (atomic verbs `s`/`d`/`a`/`r`, composite SACS
+  variants, exit code table)
 - upload/download/list operations
 - agent internal mode
 - Unix socket client/server
-- profile unlock flow
+- profile unlock flow + alias / container resolution
 - local wipe
-- Nextcloud/WebDAV operational client (until it gets split out)
+- operational provider clients (Nextcloud WebDAV, Google Drive,
+  OneDrive, Dropbox; Proton Drive deferred to v1.1+)
+- SACS state-aware completion / suggestions
 - minimal launcher for the TUI binary via `zz c`
 
 It must **not** contain:
@@ -71,6 +74,18 @@ Every change must consider:
 - tests
 - release/install impact
 - cross-repository duplication
+
+Public surfaces frozen at v1 (G1):
+
+- command grammar
+- exit code table (`pub const EXIT_*`)
+- `--json` NDJSON event schema (`v:"1"`) when scriptable mode
+  ships — see `docs/scriptable.md` once landed
+- `profile.zz` envelope and payload schema
+- agent protocol semantics
+
+After freeze, additive changes are allowed; renames or removals
+are breaking and need a major bump.
 
 A change is incomplete if it changes behavior without updating the
 relevant docs/spec/tests in the same patch.
