@@ -437,7 +437,12 @@ impl Default for DropboxSetupState {
             disable_inline_qr: false,
             clipboard_message: None,
             browser_message: None,
-            root_folder: "zz-drop".to_string(),
+            // Empty by design: the App-folder app is already
+            // sandboxed under `Apps/zz-drop/`, so an inner
+            // `zz-drop/` would surface as `Apps/zz-drop/zz-drop/…`
+            // and look like a typo. See the doc comment on
+            // `dropbox::DROPBOX_DEFAULT_ROOT` in the core crate.
+            root_folder: String::new(),
             user_email: String::new(),
             access_token: String::new(),
             refresh_token: String::new(),

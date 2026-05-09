@@ -179,7 +179,12 @@ fn save_profile_with_alias_writes_a_dropbox_provider_profile() {
                           files.metadata.read account_info.read"
         .into();
     dropbox_setup.user_email = "alice@example.org".into();
-    dropbox_setup.root_folder = "zz-drop".into();
+    // Dropbox's App-folder access type already sandboxes us under
+    // `Apps/zz-drop/`; an empty `root_folder` means "write directly
+    // there" instead of nesting another `zz-drop/` subfolder. The
+    // wizard's default for new profiles is empty — assert that the
+    // empty value round-trips through encrypt → decrypt unchanged.
+    dropbox_setup.root_folder = String::new();
 
     let outcome = save_profile_with_alias_at(
         &state,
@@ -206,7 +211,7 @@ fn save_profile_with_alias_writes_a_dropbox_provider_profile() {
         Some(ProviderProfile::Dropbox(d)) => d,
         other => panic!("expected ProviderProfile::Dropbox, got {other:?}"),
     };
-    assert_eq!(db.root_folder, "zz-drop");
+    assert_eq!(db.root_folder, "");
     assert_eq!(db.user_email, "alice@example.org");
     assert_eq!(db.auth.access_token, "access-token-canary");
     assert_eq!(db.auth.refresh_token, "refresh-token-canary");

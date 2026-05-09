@@ -48,29 +48,34 @@ impl SetupDropboxScreen {
                 ]
             }
             DropboxSetupStage::AwaitingPaste => {
-                let qr_toggle = if state.show_qr {
-                    if state.disable_inline_qr {
-                        KeyHint::new("i", "inline qr")
+                // Once the operator has any content in the textbox,
+                // single-letter actions stop firing (every char goes
+                // to input). The keybar follows the same rule so it
+                // doesn't lie about what's available.
+                let action_keys_active = state.pasted_code.is_empty();
+                let mut hints = vec![KeyHint::new("ctrl-v", "paste code")];
+                if action_keys_active {
+                    let qr_toggle = if state.show_qr {
+                        if state.disable_inline_qr {
+                            KeyHint::new("i", "inline qr")
+                        } else {
+                            KeyHint::new("i", "ascii qr")
+                        }
                     } else {
-                        KeyHint::new("i", "ascii qr")
+                        KeyHint::new("q", "show qr")
+                    };
+                    hints.push(KeyHint::new("c", "copy url"));
+                    hints.push(KeyHint::new("o", "open"));
+                    hints.push(KeyHint::new("u", "url detail"));
+                    if state.show_qr {
+                        hints.push(qr_toggle);
+                        hints.push(KeyHint::new("q", "hide qr"));
+                    } else {
+                        hints.push(qr_toggle);
                     }
-                } else {
-                    KeyHint::new("q", "show qr")
-                };
-                let mut hints = vec![
-                    KeyHint::new("c", "copy url"),
-                    KeyHint::new("o", "open"),
-                    KeyHint::new("u", "url detail"),
-                    KeyHint::new("ctrl-v", "paste code"),
-                ];
+                }
                 if state.pasted_code_appears_valid() {
                     hints.push(KeyHint::new("↵", "exchange"));
-                }
-                if state.show_qr {
-                    hints.push(qr_toggle);
-                    hints.push(KeyHint::new("q", "hide qr"));
-                } else {
-                    hints.push(qr_toggle);
                 }
                 hints.push(KeyHint::new("esc", "cancel"));
                 hints
@@ -179,7 +184,11 @@ impl SetupDropboxScreen {
                         Line::from(vec![
                             Span::styled("  folder:  ", theme.dim()),
                             Span::styled(
-                                format!("Apps/zz-drop/{}", state.root_folder),
+                                if state.root_folder.is_empty() {
+                                    "Apps/zz-drop/".to_string()
+                                } else {
+                                    format!("Apps/zz-drop/{}/", state.root_folder)
+                                },
                                 theme.cyan(),
                             ),
                         ]),
