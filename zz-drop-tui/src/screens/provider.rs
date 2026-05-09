@@ -1,7 +1,5 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
 
 use crate::theme::{PanelAccent, Theme};
 use crate::tui_widgets::{KeyHint, panel, radio};
@@ -23,18 +21,7 @@ impl ProviderScreen {
     }
 
     pub fn render(area: Rect, buf: &mut Buffer, theme: &Theme, selected: ProviderKind) {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(2), Constraint::Min(1)])
-            .split(area);
-
-        let intro = Paragraph::new(Line::from(Span::styled(
-            "Choose a provider",
-            theme.header(),
-        )));
-        ratatui::widgets::Widget::render(intro, chunks[0], buf);
-
-        let inner = panel::open(chunks[1], buf, theme, PanelAccent::Mint, " provider ");
+        let inner = panel::open(area, buf, theme, PanelAccent::Mint, " Choose Provider ");
         if inner.height < 4 {
             return;
         }
