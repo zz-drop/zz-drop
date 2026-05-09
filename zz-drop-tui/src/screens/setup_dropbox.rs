@@ -26,7 +26,7 @@ use ratatui::widgets::Paragraph;
 
 use crate::qr::qr_outer_size;
 use crate::theme::{PanelAccent, Theme};
-use crate::tui_widgets::{KeyHint, panel, two_col};
+use crate::tui_widgets::{KeyHint, form_field, panel, two_col};
 use crate::wizard::{DropboxSetupStage, DropboxSetupState};
 
 pub struct SetupDropboxScreen;
@@ -249,48 +249,69 @@ fn render_instructions(
     theme: &Theme,
     state: &DropboxSetupState,
 ) {
-    if inner.height < 6 {
+    if inner.height < 9 {
         return;
     }
+    // Top paragraph + bordered code field + bottom hint, stacked.
+    // Layout (heights):
+    //   1 blank
+    //   1 "open the URL…"
+    //   1 blank
+    //   1 the URL itself
+    //   1 blank
+    //   1 "approve, copy code, paste here:"
+    //   3 form_field bordered textbox  ← needs exactly 3 rows
+    //   1 blank
+    //   1 "press ↵ to exchange"
+    //   *  remaining slack
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1)])
+        .constraints([
+            Constraint::Length(1), // blank
+            Constraint::Length(1), // intro
+            Constraint::Length(1), // blank
+            Constraint::Length(1), // URL
+            Constraint::Length(1), // blank
+            Constraint::Length(1), // "approve, copy, paste here"
+            Constraint::Length(3), // form_field
+            Constraint::Length(1), // blank
+            Constraint::Length(1), // exchange hint
+            Constraint::Min(0),
+        ])
         .split(inner);
 
-    let pasted_display = if state.pasted_code.is_empty() {
-        Span::styled("  (empty)  type or ctrl-v to paste", theme.dim())
-    } else {
-        Span::styled(
-            format!("  {}", redact_middle(&state.pasted_code)),
-            theme.accent_bold(),
-        )
-    };
+    let intro = Paragraph::new(Line::from(Span::styled(
+        "  open the URL on any device with a browser:",
+        theme.accent_bold(),
+    )));
+    ratatui::widgets::Widget::render(intro, chunks[1], buf);
 
-    let p = Paragraph::new(vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            "  open the URL on any device with a browser:",
-            theme.accent_bold(),
-        )),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  ", theme.dim()),
-            Span::styled(state.authorize_url.clone(), theme.cyan()),
-        ]),
-        Line::from(""),
-        Line::from(Span::styled(
-            "  approve, copy the code Dropbox shows, paste it here:",
-            theme.dim(),
-        )),
-        Line::from(""),
-        Line::from(pasted_display),
-        Line::from(""),
-        Line::from(Span::styled(
-            "  press ↵ to exchange the code for tokens.",
-            theme.dim(),
-        )),
-    ]);
-    ratatui::widgets::Widget::render(p, chunks[0], buf);
+    let url_line = Paragraph::new(Line::from(vec![
+        Span::styled("  ", theme.dim()),
+        Span::styled(state.authorize_url.clone(), theme.cyan()),
+    ]));
+    ratatui::widgets::Widget::render(url_line, chunks[3], buf);
+
+    let prompt = Paragraph::new(Line::from(Span::styled(
+        "  approve, copy the code Dropbox shows, paste it here:",
+        theme.dim(),
+    )));
+    ratatui::widgets::Widget::render(prompt, chunks[5], buf);
+
+    // Bordered textbox with the typed/pasted code. Always focused
+    // while the screen owns the keyboard, so the cursor stays
+    // visible and the border is highlighted. The label "code"
+    // mirrors the convention used by Nextcloud server / auth
+    // screens.
+    form_field::render(chunks[6], buf, theme, "code", &state.pasted_code, true);
+
+    let hint_text = if state.pasted_code_appears_valid() {
+        "  press ↵ to exchange the code for tokens."
+    } else {
+        "  type or ctrl-v to paste, then press ↵ to exchange."
+    };
+    let hint = Paragraph::new(Line::from(Span::styled(hint_text, theme.dim())));
+    ratatui::widgets::Widget::render(hint, chunks[8], buf);
 }
 
 fn render_url_modal(
@@ -318,26 +339,6 @@ fn render_url_modal(
         Line::from(Span::styled("  esc closes this overlay.", theme.dim())),
     ]);
     ratatui::widgets::Widget::render(p, inner, buf);
-}
-
-/// Show only the first 3 and last 3 chars of the pasted code in the
-/// AwaitingPaste view. The code is short-lived (≤10 minutes per
-/// Dropbox docs) and not a long-term secret, but rendering it in
-/// full would print it to the user's terminal scrollback. The
-/// abbreviated form lets the operator confirm "I pasted something"
-/// without pasting the entire code into history.
-fn redact_middle(s: &str) -> String {
-    let trimmed = s.trim();
-    let chars: Vec<char> = trimmed.chars().collect();
-    if chars.len() <= 6 {
-        return chars.iter().map(|_| '•').collect();
-    }
-    let head: String = chars.iter().take(3).collect();
-    let mut tail_chars: Vec<char> = chars.iter().rev().take(3).copied().collect();
-    tail_chars.reverse();
-    let tail: String = tail_chars.into_iter().collect();
-    let middle_len = chars.len() - 6;
-    format!("{head}{}{tail}", "•".repeat(middle_len))
 }
 
 #[cfg(test)]
@@ -370,7 +371,7 @@ mod tests {
         // ↵ exchange only after a valid-looking paste.
         assert!(!hints.iter().any(|k| k.label.contains("exchange")));
 
-        s.pasted_code = "ABCDEFGHIJ".into();
+        s.pasted_code.set_value("ABCDEFGHIJ");
         let hints = SetupDropboxScreen::keybar_hint(&s);
         assert!(hints.iter().any(|k| k.label.contains("exchange")));
 
@@ -402,7 +403,7 @@ mod tests {
         s.code_verifier = "VERIFIER-CANARY".into();
         s.access_token = "AT-CANARY".into();
         s.refresh_token = "RT-CANARY".into();
-        s.pasted_code = "PASTED-CANARY".into();
+        s.pasted_code.set_value("PASTED-CANARY");
         s.user_email = "alice@example.org".into();
         let d = format!("{s:?}");
         assert!(!d.contains("VERIFIER-CANARY"));
@@ -418,20 +419,11 @@ mod tests {
     fn pasted_code_appears_valid_rejects_short_or_garbage() {
         let mut s = DropboxSetupState::default();
         assert!(!s.pasted_code_appears_valid());
-        s.pasted_code = "abc".into();
+        s.pasted_code.set_value("abc");
         assert!(!s.pasted_code_appears_valid()); // too short
-        s.pasted_code = "valid-code-12345".into();
+        s.pasted_code.set_value("valid-code-12345");
         assert!(s.pasted_code_appears_valid());
-        s.pasted_code = "has space inside".into();
+        s.pasted_code.set_value("has space inside");
         assert!(!s.pasted_code_appears_valid()); // invalid char
-    }
-
-    #[test]
-    fn redact_middle_keeps_endpoints_visible() {
-        assert_eq!(redact_middle("ABC123XYZ"), "ABC•••XYZ");
-        // Short codes get fully bulleted.
-        assert_eq!(redact_middle("abc"), "•••");
-        // Trims surrounding whitespace.
-        assert_eq!(redact_middle("  ABCDEFGHI  "), "ABC•••GHI");
     }
 }

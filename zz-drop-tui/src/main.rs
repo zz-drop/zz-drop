@@ -250,11 +250,21 @@ fn run(
                 pass.len(),
                 path.as_ref().map(|p| p.display().to_string())
             ));
+            // Envelope fingerprint computed once per attempt so the
+            // OK / fail branches log a comparable value. Lets us
+            // tell apart "same blob, wrong passphrase" from "blob
+            // got rewritten between two unlock attempts".
+            let envelope_fnv = path
+                .as_ref()
+                .and_then(|p| std::fs::read(p).ok())
+                .map(|b| zz_drop_core::diag_log::fnv64(&b))
+                .map(|v| format!("{v:016x}"))
+                .unwrap_or_else(|| "none".into());
             match path {
                 Some(p) => match zz_drop_core::profile::format::load_set_zz(&p, &pass) {
                     Ok((set, kek)) => {
                         zz_drop_core::diag_log::log(&format!(
-                            "tui_unlock decrypt_ok profiles={} salt_fnv={:016x}",
+                            "tui_unlock decrypt_ok profiles={} salt_fnv={:016x} envelope_fnv={envelope_fnv}",
                             set.profiles.len(),
                             zz_drop_core::diag_log::fnv64(kek.salt())
                         ));
@@ -270,8 +280,23 @@ fn run(
                         }
                     }
                     Err(e) => {
+                        // Surface enough non-secret context to tell
+                        // "wrong passphrase" apart from "file got
+                        // rewritten between unlocks". The envelope
+                        // FNV captures the latter: if it differs
+                        // from the value logged on the previous
+                        // decrypt_ok, the on-disk blob changed.
+                        let bytes = std::fs::read(&p).ok();
+                        let file_size = bytes.as_ref().map(|b| b.len()).unwrap_or(0);
+                        let envelope_fnv = bytes
+                            .as_ref()
+                            .map(|b| zz_drop_core::diag_log::fnv64(b))
+                            .map(|v| format!("{v:016x}"))
+                            .unwrap_or_else(|| "none".into());
                         zz_drop_core::diag_log::log(&format!(
-                            "tui_unlock decrypt_fail kind={e:?}"
+                            "tui_unlock decrypt_fail kind={e:?} pass_len={} \
+                             file_size={file_size} envelope_fnv={envelope_fnv}",
+                            pass.len(),
                         ));
                         app.apply_unlock_failed(
                             "wrong passphrase or corrupted profile blob".into(),
@@ -678,7 +703,7 @@ fn run(
         if app.dropbox_request_exchange {
             app.dropbox_request_exchange = false;
             terminal.draw(|frame| ui::draw(frame, &mut app, &theme))?;
-            let code = app.dropbox_setup.pasted_code.trim().to_string();
+            let code = app.dropbox_setup.pasted_code.value().trim().to_string();
             let verifier = app.dropbox_setup.code_verifier.clone();
             // Rebuild a fresh flow seeded with the same verifier so
             // PKCE matches the authorize URL the operator opened.

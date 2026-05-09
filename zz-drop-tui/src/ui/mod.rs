@@ -49,7 +49,8 @@ fn add_inner_stepper_index(s: Screen) -> Option<usize> {
         Screen::NextcloudAuth
         | Screen::NextcloudLoginFlow
         | Screen::SetupGoogleDrive
-        | Screen::SetupOneDrive => {
+        | Screen::SetupOneDrive
+        | Screen::SetupDropbox => {
             Some(2)
         }
         Screen::RemoteFolder | Screen::Collision | Screen::TestUpload => Some(3),
@@ -292,6 +293,10 @@ pub fn draw(frame: &mut Frame<'_>, app: &mut App, theme: &Theme) {
             Screen::SetupOneDrive => (
                 app.onedrive_setup.qr_url().to_string(),
                 app.onedrive_setup.disable_inline_qr,
+            ),
+            Screen::SetupDropbox => (
+                app.dropbox_setup.qr_url().to_string(),
+                app.dropbox_setup.disable_inline_qr,
             ),
             _ => (
                 app.login_flow.login_url.clone(),

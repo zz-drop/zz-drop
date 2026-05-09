@@ -2,6 +2,8 @@ use std::fmt;
 
 use zz_drop_core::CollisionPolicy;
 
+use crate::input::TextInput;
+
 #[derive(Clone, Default)]
 pub struct WizardState {
     pub provider_kind: ProviderKind,
@@ -400,8 +402,12 @@ pub struct DropboxSetupState {
     pub code_verifier: String,
     /// What the operator typed back from the dropbox.com page. The
     /// `AwaitingPaste` stage owns this field; it is consumed and
-    /// cleared on Exchanging.
-    pub pasted_code: String,
+    /// cleared on Exchanging. Backed by a [`TextInput`] so the
+    /// screen can render it inside the same bordered field widget
+    /// the Nextcloud server / auth screens use, with cursor
+    /// positioning, masked/unmasked toggling and Unicode-safe
+    /// editing for free.
+    pub pasted_code: TextInput,
     pub show_url_modal: bool,
     pub show_qr: bool,
     pub disable_inline_qr: bool,
@@ -425,7 +431,7 @@ impl Default for DropboxSetupState {
             stage: DropboxSetupStage::default(),
             authorize_url: String::new(),
             code_verifier: String::new(),
-            pasted_code: String::new(),
+            pasted_code: TextInput::new(),
             show_url_modal: false,
             show_qr: true,
             disable_inline_qr: false,
@@ -466,7 +472,7 @@ impl DropboxSetupState {
     /// strings, typically 30–60 chars). Used to gate the
     /// `↵ exchange` keybar hint.
     pub fn pasted_code_appears_valid(&self) -> bool {
-        let trimmed = self.pasted_code.trim();
+        let trimmed = self.pasted_code.value().trim();
         if trimmed.len() < 8 {
             return false;
         }

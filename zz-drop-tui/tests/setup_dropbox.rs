@@ -22,7 +22,7 @@ use zz_drop_core::profile::format::load_set_zz;
 use zz_drop_core::ProviderProfile;
 use zz_drop_tui::app::App;
 use zz_drop_tui::screens::Screen;
-use zz_drop_tui::upload_test::{SaveProfileOutcome, save_profile_with_alias};
+use zz_drop_tui::upload_test::{SaveProfileOutcome, save_profile_with_alias_at};
 use zz_drop_tui::wizard::{
     DropboxSetupStage, DropboxSetupState, GoogleDriveSetupState, OneDriveSetupState,
     ProviderKind, WizardState,
@@ -60,7 +60,7 @@ fn esc_on_setup_dropbox_clears_flags_and_returns_to_picker() {
     app.dropbox_setup.authorize_url =
         "https://www.dropbox.com/oauth2/authorize?…".into();
     app.dropbox_setup.code_verifier = "verifier-canary".into();
-    app.dropbox_setup.pasted_code = "PARTIAL".into();
+    app.dropbox_setup.pasted_code.set_value("PARTIAL");
     app.dropbox_request_init = true;
     app.dropbox_request_exchange = true;
     app.dropbox_request_email = true;
@@ -108,7 +108,7 @@ fn typing_pasted_code_and_pressing_enter_arms_exchange() {
     for c in "ABCDEFGHIJ12345".chars() {
         app.on_key(k(KeyCode::Char(c)));
     }
-    assert_eq!(app.dropbox_setup.pasted_code, "ABCDEFGHIJ12345");
+    assert_eq!(app.dropbox_setup.pasted_code.value(), "ABCDEFGHIJ12345");
     assert!(app.dropbox_setup.pasted_code_appears_valid());
     // Enter triggers exchange (transitions stage + arms flag).
     app.on_key(k(KeyCode::Enter));
@@ -133,7 +133,7 @@ fn apply_dropbox_tokens_clears_pasted_code_and_arms_email() {
     app.screen = Screen::SetupDropbox;
     app.dropbox_setup.stage = DropboxSetupStage::Exchanging;
     app.dropbox_setup.code_verifier = "v".repeat(43);
-    app.dropbox_setup.pasted_code = "PASTED-CANARY".into();
+    app.dropbox_setup.pasted_code.set_value("PASTED-CANARY");
 
     app.apply_dropbox_tokens(
         "AT-CANARY".into(),
@@ -157,12 +157,12 @@ fn save_profile_with_alias_writes_a_dropbox_provider_profile() {
     // and assert the round-tripped profile matches the input
     // payload.
     let tmp = tempdir().unwrap();
-    // Force a deterministic config dir so we don't pollute the
-    // user's real `~/.config/zz-drop/`.
-    unsafe {
-        std::env::set_var("XDG_CONFIG_HOME", tmp.path());
-        std::env::set_var("HOME", tmp.path());
-    }
+    // Hermetic save: explicit path inside `tempdir`. Setting
+    // `XDG_CONFIG_HOME` is unsafe on macOS — the `directories`
+    // crate ignores it and falls back to
+    // `~/Library/Application Support/`, which would clobber the
+    // operator's real container during `cargo test`.
+    let path = tmp.path().join("profiles-local.zz");
 
     let mut state = WizardState::default();
     state.provider_kind = ProviderKind::Dropbox;
@@ -181,19 +181,20 @@ fn save_profile_with_alias_writes_a_dropbox_provider_profile() {
     dropbox_setup.user_email = "alice@example.org".into();
     dropbox_setup.root_folder = "zz-drop".into();
 
-    let outcome = save_profile_with_alias(
+    let outcome = save_profile_with_alias_at(
         &state,
         &gdrive_setup,
         &onedrive_setup,
         &dropbox_setup,
         PASS,
         "dropbox-canary",
+        &path,
     );
-    let path = match outcome {
+    let path_str = match outcome {
         SaveProfileOutcome::Ok { path } => path,
         SaveProfileOutcome::Failed(reason) => panic!("expected save success: {reason}"),
     };
-    let path = std::path::PathBuf::from(path);
+    let path = std::path::PathBuf::from(path_str);
     assert!(path.exists(), "container blob not written at {path:?}");
 
     let (set, _kek) = load_set_zz(&path, PASS).unwrap();

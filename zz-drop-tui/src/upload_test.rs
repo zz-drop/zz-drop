@@ -605,6 +605,32 @@ pub fn run_save_profile(
     dropbox_setup: &DropboxSetupState,
     passphrase: &str,
 ) -> SaveProfileOutcome {
+    let path = match config_profile_path() {
+        Some(p) => p,
+        None => return SaveProfileOutcome::Failed("could not resolve config dir".into()),
+    };
+    run_save_profile_at(
+        state,
+        gdrive_setup,
+        onedrive_setup,
+        dropbox_setup,
+        passphrase,
+        &path,
+    )
+}
+
+/// Same as [`run_save_profile`] but writes to an explicit path.
+/// Used by integration tests so they cannot clobber the operator's
+/// real `profiles-local.zz` — see the docstring on
+/// [`save_profile_with_alias_at`] for the full rationale.
+pub fn run_save_profile_at(
+    state: &WizardState,
+    gdrive_setup: &GoogleDriveSetupState,
+    onedrive_setup: &OneDriveSetupState,
+    dropbox_setup: &DropboxSetupState,
+    passphrase: &str,
+    path: &std::path::Path,
+) -> SaveProfileOutcome {
     // Pre-push placeholder alias depends on the provider:
     // Nextcloud uses the WebDAV username; OAuth providers use the
     // local-part of the account email so the wizard pill has
@@ -638,13 +664,14 @@ pub fn run_save_profile(
                 .to_string(),
         },
     };
-    save_profile_with_alias(
+    save_profile_with_alias_at(
         state,
         gdrive_setup,
         onedrive_setup,
         dropbox_setup,
         passphrase,
         &alias,
+        path,
     )
 }
 
@@ -653,6 +680,15 @@ pub fn run_save_profile(
 /// `profile-local.zz`. Used by `run_save_profile` (placeholder alias
 /// = username) and by the alias-picker rewrite step (real alias
 /// chosen by the operator).
+///
+/// Production callers go through this entry point, which resolves
+/// the destination path from the user's config dir. Tests must use
+/// [`save_profile_with_alias_at`] instead with an explicit path
+/// rooted in a `tempdir`, so they can never clobber the operator's
+/// real `profiles-local.zz` (the `directories` crate ignores
+/// `XDG_CONFIG_HOME` on macOS and falls back to
+/// `~/Library/Application Support/`, which historically caused
+/// `cargo test` runs to overwrite the maintainer's container).
 pub fn save_profile_with_alias(
     state: &WizardState,
     gdrive_setup: &GoogleDriveSetupState,
@@ -660,6 +696,34 @@ pub fn save_profile_with_alias(
     dropbox_setup: &DropboxSetupState,
     passphrase: &str,
     alias: &str,
+) -> SaveProfileOutcome {
+    let path = match config_profile_path() {
+        Some(p) => p,
+        None => return SaveProfileOutcome::Failed("could not resolve config dir".into()),
+    };
+    save_profile_with_alias_at(
+        state,
+        gdrive_setup,
+        onedrive_setup,
+        dropbox_setup,
+        passphrase,
+        alias,
+        &path,
+    )
+}
+
+/// Same as [`save_profile_with_alias`] but writes to an explicit
+/// path. Used by integration tests so they can isolate themselves
+/// inside a `tempdir` without relying on `XDG_CONFIG_HOME` (which
+/// `directories` ignores on macOS).
+pub fn save_profile_with_alias_at(
+    state: &WizardState,
+    gdrive_setup: &GoogleDriveSetupState,
+    onedrive_setup: &OneDriveSetupState,
+    dropbox_setup: &DropboxSetupState,
+    passphrase: &str,
+    alias: &str,
+    path: &std::path::Path,
 ) -> SaveProfileOutcome {
     use std::time::SystemTime;
 
@@ -722,13 +786,13 @@ pub fn save_profile_with_alias(
         updated_at: timestamp,
     };
 
-    let path = match config_profile_path() {
-        Some(p) => p,
-        None => return SaveProfileOutcome::Failed("could not resolve config dir".into()),
-    };
-
+    if let Some(parent) = path.parent()
+        && std::fs::create_dir_all(parent).is_err()
+    {
+        return SaveProfileOutcome::Failed("could not create config dir".into());
+    }
     let set = ProfileSet::with_profile(profile);
-    if save_set_zz(&set, passphrase, &path).is_err() {
+    if save_set_zz(&set, passphrase, path).is_err() {
         return SaveProfileOutcome::Failed("could not encrypt or write profile blob".into());
     }
 

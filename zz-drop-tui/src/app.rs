@@ -1965,20 +1965,20 @@ impl App {
                 if let Ok(contents) = clipboard::read_from_clipboard() {
                     let trimmed = contents.trim();
                     if !trimmed.is_empty() {
-                        self.dropbox_setup.pasted_code = trimmed.to_string();
+                        self.dropbox_setup.pasted_code.set_value(trimmed);
                         self.dropbox_setup.clipboard_message = Some("pasted");
                     }
                 }
             }
             KeyCode::Backspace if editable => {
-                self.dropbox_setup.pasted_code.pop();
+                self.dropbox_setup.pasted_code.backspace();
             }
             KeyCode::Char(c)
                 if editable
                     && (c.is_ascii_alphanumeric() || c == '-' || c == '_')
-                    && self.dropbox_setup.pasted_code.len() < 200 =>
+                    && self.dropbox_setup.pasted_code.value().len() < 200 =>
             {
-                self.dropbox_setup.pasted_code.push(c);
+                self.dropbox_setup.pasted_code.push_char(c);
             }
             KeyCode::Enter => {
                 if editable && self.dropbox_setup.pasted_code_appears_valid() {
@@ -2664,7 +2664,7 @@ impl App {
         }
         // Clear the now-consumed paste-code state so a Failed/retry
         // cycle does not accidentally re-submit the same code.
-        self.dropbox_setup.pasted_code.clear();
+        self.dropbox_setup.pasted_code.set_value("");
         self.dropbox_setup.code_verifier.clear();
         self.dropbox_setup.stage = DropboxSetupStage::Fetching;
         self.dropbox_request_email = true;

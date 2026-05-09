@@ -21,7 +21,7 @@ use zz_drop_core::profile::format::load_set_zz;
 use zz_drop_core::{Argon2idConfig, ProviderProfile};
 use zz_drop_tui::app::App;
 use zz_drop_tui::screens::Screen;
-use zz_drop_tui::upload_test::{SaveProfileOutcome, save_profile_with_alias};
+use zz_drop_tui::upload_test::{SaveProfileOutcome, save_profile_with_alias_at};
 use zz_drop_tui::wizard::{
     GoogleDriveSetupState, OneDriveSetupStage, OneDriveSetupState, ProviderKind, WizardState,
 };
@@ -146,13 +146,12 @@ fn save_profile_with_alias_writes_a_onedrive_provider_profile() {
     // payload. Mirrors what happens in `main.rs::run_save_profile`
     // after the device flow lands on Done.
     let dir = tempdir().unwrap();
-    // The save path resolves under the user's config dir; for a
-    // hermetic test we override it with tempdir-rooted env.
-    unsafe {
-        // SAFETY: single-threaded test, no other code touches these
-        // env vars. Restored by `tempdir` going out of scope.
-        std::env::set_var("XDG_CONFIG_HOME", dir.path());
-    }
+    // Hermetic save: explicit path inside `tempdir`. We do NOT set
+    // `XDG_CONFIG_HOME` because on macOS the `directories` crate
+    // ignores it and falls back to `~/Library/Application Support/`,
+    // which would clobber the maintainer's real container — see
+    // upload_test::save_profile_with_alias_at docstring.
+    let path = dir.path().join("profiles-local.zz");
 
     let mut state = WizardState::default();
     state.provider_kind = ProviderKind::OneDrive;
@@ -168,13 +167,14 @@ fn save_profile_with_alias_writes_a_onedrive_provider_profile() {
     onedrive_setup.root_folder = "zz-drop".into();
 
     let dropbox_setup = zz_drop_tui::wizard::DropboxSetupState::default();
-    let outcome = save_profile_with_alias(
+    let outcome = save_profile_with_alias_at(
         &state,
         &gdrive_setup,
         &onedrive_setup,
         &dropbox_setup,
         PASS,
         "onedrive-canary",
+        &path,
     );
     let path = match outcome {
         SaveProfileOutcome::Ok { path } => path,
@@ -280,13 +280,11 @@ fn first_setup_oauth_provider_routes_through_inner_alias() {
 #[test]
 fn full_tui_save_path_with_single_char_passphrase() {
     use zz_drop_core::profile::format::load_set_zz;
-    use zz_drop_tui::upload_test::run_save_profile;
+    use zz_drop_tui::upload_test::run_save_profile_at;
     use zz_drop_tui::wizard::WizardMode;
 
     let dir = tempdir().unwrap();
-    unsafe {
-        std::env::set_var("XDG_CONFIG_HOME", dir.path());
-    }
+    let path = dir.path().join("profiles-local.zz");
 
     let mut state = WizardState::default();
     state.provider_kind = ProviderKind::Nextcloud;
@@ -303,12 +301,12 @@ fn full_tui_save_path_with_single_char_passphrase() {
     // on the passphrase screen.
     let pass = "!";
     let dropbox = zz_drop_tui::wizard::DropboxSetupState::default();
-    let outcome = run_save_profile(&state, &gdrive, &onedrive, &dropbox, pass);
-    let path = match outcome {
+    let outcome = run_save_profile_at(&state, &gdrive, &onedrive, &dropbox, pass, &path);
+    let path_str = match outcome {
         SaveProfileOutcome::Ok { path } => path,
         SaveProfileOutcome::Failed(reason) => panic!("save failed: {reason}"),
     };
-    let path = std::path::PathBuf::from(path);
+    let path = std::path::PathBuf::from(path_str);
 
     let (set, _kek) = load_set_zz(&path, pass)
         .expect("decrypt with the same single-char passphrase");
@@ -348,13 +346,11 @@ fn round_trip_with_single_char_passphrase() {
 /// setup — exactly the failure mode worth locking.
 #[test]
 fn round_trip_save_then_load_with_alias_override() {
-    use zz_drop_tui::upload_test::run_save_profile;
+    use zz_drop_tui::upload_test::run_save_profile_at;
     use zz_drop_tui::wizard::WizardMode;
 
     let dir = tempdir().unwrap();
-    unsafe {
-        std::env::set_var("XDG_CONFIG_HOME", dir.path());
-    }
+    let path = dir.path().join("profiles-local.zz");
 
     let mut state = WizardState::default();
     state.provider_kind = ProviderKind::OneDrive;
@@ -372,12 +368,13 @@ fn round_trip_save_then_load_with_alias_override() {
     let _ = (FAST_KDF, WizardMode::CreateLocal);
 
     let dropbox_setup = zz_drop_tui::wizard::DropboxSetupState::default();
-    let outcome = run_save_profile(
+    let outcome = run_save_profile_at(
         &state,
         &gdrive_setup,
         &onedrive_setup,
         &dropbox_setup,
         "round-trip-pass",
+        &path,
     );
     let path = match outcome {
         SaveProfileOutcome::Ok { path } => path,
