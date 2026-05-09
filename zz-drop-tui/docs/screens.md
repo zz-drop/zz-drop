@@ -31,6 +31,7 @@ The 8-step indices are mapped from `Screen::stepper_index()` in
 | `RemoteFolder` | `setup › folder` | 4 | Path form field with core-validated path tag. |
 | `Collision` | `setup › collision` | 4 | Three radio rows (Rename / Overwrite / Fail) + a Dim "preview" panel that adapts to the focused choice. |
 | `TestUpload` | `setup › probe` | 4 | Three Check rows (`ensure folder` / `upload tiny file` / `cleanup`). Two-stage probe with live progress; cleanup is `Skip` until TASK 27 lands. |
+| `InnerAlias` | `setup › alias` | – | Single bordered input pre-filled with a `<provider>-<adj>-<noun>-NN` mnemonic suggestion. Reached after `TestUpload` in every wizard mode (first-profile + add-inner) so the operator always picks a deliberate alias instead of inheriting a placeholder. `Tab` regenerates the suggestion; `Enter` confirms. From here the first-profile flow advances to `ProfilePassphrase`; the add-inner flow appends to the unlocked container directly. |
 | `ProfilePassphrase` | `setup › encrypt` | 5 | See [`profile-passphrase.md`](profile-passphrase.md). Two masked form fields, zxcvbn strength bar, weak-passphrase warning sub-state. |
 | `Done` | `done` | 7 | CLI cheat sheet + `p · push to zz-drop.net` keybar entry. |
 
