@@ -13,9 +13,11 @@ configuration, profile passphrase entry and recovery.
 
 Pre-alpha. v1 ships **local-only** by default (see "v1 ships
 local-only" below). Supported providers: **Nextcloud** (WebDAV with
-App Password or Login Flow v2) and **Google Drive** (OAuth 2.0
-device flow). Full setup catalogue, per-screen behavior and
-recovery semantics live in [`docs/setup.md`](docs/setup.md),
+App Password or Login Flow v2), **Google Drive** (OAuth 2.0 device
+flow), **OneDrive** (OAuth device flow, Microsoft Graph), and
+**Dropbox** (OAuth paste-code + PKCE, App folder sandbox). Full
+setup catalogue, per-screen behavior and recovery semantics live
+in [`docs/setup.md`](docs/setup.md),
 [`docs/login-flow.md`](docs/login-flow.md), and
 [`docs/profile-passphrase.md`](docs/profile-passphrase.md).
 
@@ -117,23 +119,36 @@ convey meaning.
 
 ## Screens
 
+Default build (v1):
+
 | Screen | Status |
 |---|---|
-| Welcome | implemented (two-track LOCAL / REMOTE menu) |
-| Provider | implemented (Nextcloud only in v1) |
+| Welcome | implemented (LOCAL track; REMOTE track shown only with `--features remote`) |
+| Provider | implemented (Nextcloud, Google Drive, OneDrive, Dropbox) |
 | Nextcloud server | implemented (URL validation) |
-| Nextcloud auth — app password | implemented (with masked input) |
-| Nextcloud auth — Login Flow | implemented (URL / inline-image QR / ASCII fallback / clipboard / browser-on-request) |
+| Nextcloud auth — app password | implemented (masked input) |
+| Nextcloud auth — Login Flow | implemented (URL / inline QR / ASCII fallback / clipboard / browser-on-request) |
+| Google Drive auth | implemented (OAuth device flow, scope `drive.file`) |
+| OneDrive auth | implemented (OAuth device flow, Microsoft Graph) |
+| Dropbox auth | implemented (OAuth paste-code + PKCE, App folder sandbox) |
 | Remote folder | implemented (path validation via core) |
 | Collision policy | implemented (Rename / Overwrite / Fail) |
-| Test upload | implemented (four-stage probe with live progress: `ensure folder` → `marker` → `upload` → `cleanup`) |
-| Profile passphrase + persistence | implemented (zxcvbn strength meter, weak warning, encrypts `profiles-local.zz`, file mode 0600) |
-| Done | implemented (final summary + CLI cheat sheet; `↵` returns to Welcome, `q` exits) |
-| Profile unlock | implemented (passphrase prompt for `profiles-local.zz` or `profiles-remote.zz`; honours session cache) |
-| Profile manage | implemented (view fields, reveal app password, re-test, re-push, wipe) |
-| Account login (push / sign-in sub-flow) | implemented (email + password; reuses cached session token across screens in the same run) |
+| Test upload (probe) | implemented (four-stage: ensure folder → marker → upload → cleanup) |
+| Profile passphrase | implemented (strength meter, weak-passphrase warning) |
+| Done | implemented (summary + CLI cheat sheet) |
+| Profile unlock | implemented (passphrase prompt, session cache) |
+| Profile manage | implemented (view fields, reveal credentials, re-test, re-push, wipe) |
+
+Behind `--features remote` (v2 preview, hidden in default build):
+
+| Screen | Status |
+|---|---|
+| Account login (push / sign-in) | implemented (email + password; session cached in RAM) |
 | Two-factor (TOTP) | implemented (only when account has 2FA on) |
-| Push / Download profile | implemented (alias picker; in wizard push the blob is re-encrypted with the picked alias before upload so file and server agree on the alias inside the blob; in SignIn mode the same screen downloads the picked alias into `profiles-remote.zz`) |
+| Push / Download profile | implemented (alias picker) |
+
+Per-screen details, keybars and transitions live in
+[`docs/screens.md`](docs/screens.md).
 
 ## Setup flow
 
@@ -198,10 +213,10 @@ remote profile**, opt-in on **Create local container**, manual via
 
 Project-wide details, including honest non-goals and the
 vulnerability-disclosure pointer, live in
-[`../zz-drop/docs/security.md`](../zz-drop/docs/security.md). The
-local agent specifics (which `zz-tui` does not run, but its CLI
+[zz-drop/docs/security.md](https://github.com/Gibbio/zz-drop/blob/main/docs/security.md).
+The local agent specifics (which `zz-tui` does not run, but its CLI
 sibling does) are in
-[`../zz-drop/docs/agent.md`](../zz-drop/docs/agent.md).
+[zz-drop/docs/agent.md](https://github.com/Gibbio/zz-drop/blob/main/docs/agent.md).
 
 ## Scope
 
@@ -233,7 +248,7 @@ cargo build --features remote
 
 The flag is temporary; it graduates default-on in v2 and is removed
 once the v2 line stabilises. See
-[`zz-drop-core/docs/feature-flags.md`](../zz-drop-core/docs/feature-flags.md).
+[zz-drop-core/docs/feature-flags.md](https://github.com/Gibbio/zz-drop-core/blob/main/docs/feature-flags.md).
 
 ## License
 
