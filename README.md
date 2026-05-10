@@ -5,6 +5,8 @@
 Minimalist CLI to put files into — and get files from — a configured
 safe cloud destination.
 
+![zz-drop CLI demo](.github/assets/cli-demo.gif)
+
 ```bash
 zz file.md      # upload
 zz d file.md    # download
