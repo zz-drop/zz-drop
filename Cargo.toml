@@ -2,7 +2,7 @@
 name = "zz-drop"
 version = "0.0.1"
 edition = "2024"
-license = "TBD"
+license = "MIT OR Apache-2.0"
 description = "CLI and local agent for zz-drop"
 repository = "https://github.com/zz-drop/zz-drop"
 publish = false
