@@ -6,7 +6,7 @@ to ask for the passphrase again. Same binary, two roles.
 
 ## How it starts
 
-`zz x` (unlock) is the entry point.
+`zz z` (unlock) is the entry point.
 
 1. The CLI prompts for the profile passphrase (no echo, via `rpassword`).
 2. It reads `profile.zz`, decrypts it locally, and constructs a
@@ -65,7 +65,7 @@ The reference values are pinned in
 
 ## CLI surface
 
-- `zz x` — unlock; spawns the agent if needed.
+- `zz z` — unlock; spawns the agent if needed.
 - `zz q` — lock; no-op (and exit 0) if no agent is running.
 - `zz w` — wipe; asks the user to type "wipe" to confirm. In a
   non-interactive shell, requires the env var `ZZ_DROP_CONFIRM_WIPE=yes`.

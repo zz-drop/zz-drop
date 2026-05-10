@@ -205,7 +205,7 @@ where
 
     if !paths.agent_socket.exists() {
         output::err_line(&output::render_failed("(agent)", "locked", None, &ColorPolicy::detect()));
-        output::err_line(&output::render_hint("zz x"));
+        output::err_line(&output::render_hint("zz z"));
         return EXIT_AGENT_UNREACHABLE;
     }
 
@@ -231,7 +231,7 @@ where
                 None,
                 &ColorPolicy::detect(),
             ));
-            output::err_line(&output::render_hint("zz x"));
+            output::err_line(&output::render_hint("zz z"));
             return EXIT_AGENT_UNREACHABLE;
         }
         Err(_) => {

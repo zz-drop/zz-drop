@@ -85,7 +85,7 @@ fn failed_has_ansi_when_on() {
 
 #[test]
 fn hint_format() {
-    assert_eq!(render_hint("zz x"), "run: zz x");
+    assert_eq!(render_hint("zz z"), "run: zz z");
 }
 
 #[test]
