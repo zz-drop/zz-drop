@@ -1,7 +1,7 @@
 //! Render snapshot for the post-setup `DoneScreen`. Locks two
 //! invariants:
 //!
-//! - the operator gets the daily-use cheat sheet (`zz x`,
+//! - the operator gets the daily-use cheat sheet (`zz z`,
 //!   `zz file.md`, ...);
 //! - the optional shell-completion install hint shows the three
 //!   one-liners (bash / zsh / fish) so the user can copy-paste
@@ -49,7 +49,7 @@ fn render_local_only_done() -> String {
 #[test]
 fn done_screen_lists_the_daily_cli_recap() {
     let s = render_local_only_done();
-    for needle in ["zz x", "zz file.md", "zz d file.md", "zz q"] {
+    for needle in ["zz z", "zz file.md", "zz d file.md", "zz q"] {
         assert!(
             s.contains(needle),
             "daily recap missing `{needle}` — render was:\n{s}"

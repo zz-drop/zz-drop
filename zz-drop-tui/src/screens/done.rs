@@ -138,7 +138,7 @@ impl DoneScreen {
         ));
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
-            Span::styled("    zz x", theme.cyan()),
+            Span::styled("    zz z", theme.cyan()),
             Span::styled("          # unlock the profile in the agent", theme.dim()),
         ]));
         lines.push(Line::from(vec![
