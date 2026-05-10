@@ -46,7 +46,7 @@ pub struct Paths {
 }
 
 impl Paths {
-    /// Pick the file `zz x` should unlock. Precedence: remote first
+    /// Pick the file `zz z` should unlock. Precedence: remote first
     /// (synced state is the source of truth), then local-only.
     /// Returns `None` if neither file exists.
     pub fn active_profile_file(&self) -> Option<&Path> {
