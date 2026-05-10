@@ -7,6 +7,8 @@ Ratatui-based setup and configuration UI for the
 in the CLI (`zz file.md`). This binary is for setup, provider
 configuration, profile passphrase entry and recovery.
 
+![zz-drop TUI walkthrough](https://raw.githubusercontent.com/Gibbio/zz-drop/main/.github/assets/tui-demo.gif)
+
 ## Status
 
 Pre-alpha. v1 ships **local-only** by default — see the section
@@ -170,23 +172,6 @@ apply right now. The pill on the top right shows whether the
 current session is operating on a local or remote profile (with the
 server label and alias when known): `o no profile`, `* local · <alias>`,
 or `* remote · <server> · <alias>`.
-
-### Welcome
-
-The TUI starts on a welcome screen and walks you through the full
-setup. The animated demo below goes end-to-end: welcome → provider
-pick → OAuth device flow → folder probe → alias → encrypt → push.
-
-![zz-drop TUI walkthrough](https://raw.githubusercontent.com/Gibbio/zz-drop/main/.github/assets/tui-demo.gif)
-
-(With `--features remote` a REMOTE block also appears with
-*Add to remote container* and *Sign in to zz-drop.net*; the
-default v1 build hides it.)
-
-When `profiles-local.zz` and/or `profiles-remote.zz` are already on
-disk, an **Open local profile** / **Open synced profile** entry
-shows up at the top of each section. Picking it asks for the
-passphrase the first time and reuses the in-RAM cache afterwards.
 
 ### Nextcloud — Login Flow (with QR)
 
