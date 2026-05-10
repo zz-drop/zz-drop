@@ -7,11 +7,6 @@ safe cloud destination.
 
 ![zz-drop CLI demo](.github/assets/cli-demo.gif)
 
-```bash
-zz file.md      # upload
-zz d file.md    # download
-```
-
 zz-drop is **not** a sync tool, **not** a mount tool, **not** a generic
 cloud file manager. It is a fast, explicit one-shot transfer from a
 local machine to a configured cloud target.
