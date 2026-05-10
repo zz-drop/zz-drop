@@ -11,40 +11,13 @@ configuration, profile passphrase entry and recovery.
 
 ## Status
 
-Pre-alpha. v1 ships **local-only** by default — see the section
-"v1 ships local-only" below for what that means and how to opt in
-to the remote surface.
-
-The Welcome screen exposes a **LOCAL** track:
-
-- *Create local container* runs the wizard (provider → server URL
-  / OAuth → auth → remote folder → collision policy → test upload
-  → passphrase) and writes the encrypted container as
-  `profiles-local.zz` with a strong "no recovery if file or
-  passphrase lost" warning.
-- *Add profile to local container* (shown when the file already
-  exists) unlocks the existing container and routes the wizard to
-  append a new inner profile, re-encrypting in place against the
-  cached KEK — the operator does not retype the passphrase.
-- *Open local container* shows the picker; the operator chooses
-  any inner profile to inspect or re-test.
-
-Supported providers in v1: **Nextcloud** (WebDAV with App Password
-or Login Flow v2) and **Google Drive** (OAuth 2.0 device flow).
-
-When built with `--features remote`, a parallel **REMOTE** track
-appears on the Welcome screen for `profiles-remote.zz` (the local
-cache of a server-synced container) — *Add to remote container*,
-*Sign in & fetch*, *Open synced container*.
-
-The session token and most-recently-active inner profile are
-cached in RAM for the duration of a `zz-tui` run, so re-opening
-the same source or re-pushing skips the passphrase / login
-screens.
-
-Detailed flow: [`docs/setup.md`](docs/setup.md). Login Flow
-specifics: [`docs/login-flow.md`](docs/login-flow.md). Profile
-passphrase: [`docs/profile-passphrase.md`](docs/profile-passphrase.md).
+Pre-alpha. v1 ships **local-only** by default (see "v1 ships
+local-only" below). Supported providers: **Nextcloud** (WebDAV with
+App Password or Login Flow v2) and **Google Drive** (OAuth 2.0
+device flow). Full setup catalogue, per-screen behavior and
+recovery semantics live in [`docs/setup.md`](docs/setup.md),
+[`docs/login-flow.md`](docs/login-flow.md), and
+[`docs/profile-passphrase.md`](docs/profile-passphrase.md).
 
 ## Quickstart
 
@@ -164,118 +137,30 @@ convey meaning.
 
 ## Setup flow
 
-A typical run looks like this. You launch `zz-tui` (or `zz c` from
-the CLI), pick a track on the **Welcome** screen, walk through the
-setup steps, and end on a **Done** screen. Everything is
-keyboard-only; the bottom keybar always shows the bindings that
-apply right now. The pill on the top right shows whether the
-current session is operating on a local or remote profile (with the
-server label and alias when known): `o no profile`, `* local · <alias>`,
-or `* remote · <server> · <alias>`.
+A typical run: launch `zz-tui` (or `zz c` from the CLI), pick a
+track on the Welcome screen, walk through provider / auth / folder
+/ collision / probe / passphrase, end on a Done screen. Everything
+is keyboard-only; the bottom keybar always shows the current
+bindings. The pill on the top right reports session state:
+`o no profile`, `* local · <alias>`, or `* remote · <server> · <alias>`.
 
-### Nextcloud — Login Flow (with QR)
+Three distinctive moments:
 
-For headless setups: the server returns an `otpauth://`-style URL,
-the TUI shows it as a QR (Kitty/WezTerm/Ghostty native, half-block
-ASCII everywhere else), and you authorize from a phone or any
-second device with a browser.
+- **Nextcloud Login Flow with QR.** Headless-friendly auth: the
+  TUI renders the authorization URL as a QR (Kitty / WezTerm /
+  Ghostty inline graphics, half-block ASCII everywhere else). You
+  scan from a phone, approve, the TUI auto-advances.
+- **Done — pushed (happy path).** Pill flips to `* local · <alias>`.
+  Screen shows the path of `profiles-local.zz`, the alias to use
+  with `zz z <alias>`, and the CLI cheat sheet (`zz z`, `zz <file>`,
+  `zz d <file>`, `zz q`).
+- **Done — local-only (no recovery warning).** Yellow panel: if you
+  lose the file or the passphrase, the profile is gone. Explains
+  how to make it recoverable later by pushing to `zz-drop.net`.
 
-```text
-| zz-tui  ›  setup › auth › login flow                                                                    o no profile
-* welcome  * provider  * server  @ auth  o folder  o encrypt  . push  o done
-| authorize with phone                             | link
-┌───────────────────────────────────────────────┐  ┌───────────────────────────────────────────────┐
-│ █▀▀▀▀▀█  █▀███ ▄▀▄█▀▄ ▄▀█ █▀▀▀▀▀█             │  │  authorization url                            │
-│ █ ███ █ █▄█▀█▄▄█▀▄  ▀▀█ ▄ █ ███ █             │  │  https://nextcloud.example.org · press u for  │
-│ █ ▀▀▀ █ █ ▀█▄ ▄▄▀█▀▀▀ ▄▀█ █ ▀▀▀ █             │  │  status                                       │
-│ ▀▀▀▀▀▀▀ █ ▀ █ █ █ █▄▀▄▀▄█ ▀▀▀▀▀▀▀             │  │  v poll endpoint  reachable                   │
-│ █▄▀▀▀█▀▄▄▀█▄ ██▀▄▀▄▄▄▄▀▄▀ ██▀██ ▄             │  │  * user grant  awaiting                       │
-│   …  (truncated for the README)               │  │                                               │
-└───────────────────────────────────────────────┘  └───────────────────────────────────────────────┘
- c  copy    o  open    u  url detail    i  ascii qr    q  hide qr    esc  back
-```
-
-### Done — pushed (happy path)
-
-The pill flips from `no profile` to `local · <alias>` / `remote ·
-<server> · <alias>` as soon as the wizard saves a blob.
-
-```text
-| zz-tui  ›  done                                                                                    * local · casa-nc
-
-| done
-┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                                                                                                      │
-│   ✓ setup complete                                                                                                   │
-│                                                                                                                      │
-│   the profile is now retrievable from any shell with                                                                 │
-│     zz z casa-nc    # 4096 bytes, version 1                                                                          │
-│                                                                                                                      │
-│   profile at:  /home/alice/.config/zz-drop/profiles-local.zz                                                          │
-│                                                                                                                      │
-│   daily use stays in the CLI:                                                                                        │
-│                                                                                                                      │
-│     zz x          # unlock the profile in the agent                                                                  │
-│     zz file.md    # upload                                                                                           │
-│     zz d file.md  # download                                                                                         │
-│     zz q          # lock                                                                                             │
-│                                                                                                                      │
-│   press ↵ to go back, q to exit.                                                                                     │
-└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- ↵  back to welcome    q  exit
-```
-
-### Done — local-only (no recovery warning)
-
-After **Create local container** with the push step skipped, the
-panel turns yellow and spells out exactly what "no recovery" means
-plus how to make the profile recoverable later.
-
-```text
-| zz-tui  ›  done                                                                                    * local · casa-nc
-
-| local profile saved · no recovery
-┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│   ⚠  profile saved locally — not on any server                                                                       │
-│                                                                                                                      │
-│   if you lose either                                                                                                 │
-│     • the file profiles-local.zz                                                                                      │
-│     • the passphrase you just typed                                                                                  │
-│   the contents are gone — there is no recovery.                                                                      │
-│                                                                                                                      │
-│   to make it recoverable from any shell:                                                                             │
-│     • re-run zz-tui, choose Open local profile,                                                                      │
-│       then press p to push it to zz-drop.net under an alias.                                                         │
-│   …                                                                                                                  │
-└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- ↵  back to welcome    q  exit
-```
-
-The full screen catalogue with per-screen keybars and transitions is
-in [`docs/screens.md`](docs/screens.md).
-
-## Ratatui notes
-
-`zz-tui` runs entirely in the terminal — no GUI, no `xdg-open`, no
-embedded browser. Some constraints we hold ourselves to:
-
-- Target frame **100 × 30**; minimum **80 × 24**. Smaller terminals
-  show a centered "terminal too small" message instead of panicking.
-- No floating elements outside panel rectangles. No popovers; modals
-  (e.g. the Login Flow URL detail) take over the body region.
-- Long URLs and paths are truncated with a middle ellipsis or shown
-  in a dedicated modal — never wrapped onto an unpredictable number
-  of lines.
-- The bottom **keybar is always visible** and reflects the current
-  state of the screen.
-- **Color is never required for meaning**. With `NO_COLOR=1` the
-  TUI degrades to `BOLD` / `DIM` / `UNDERLINED` / `REVERSED` and
-  every status remains readable.
-- **Login Flow is headless-friendly**: a phone is enough to complete
-  authentication; no browser on the box running `zz-tui` is required.
-- The QR renderer falls back to half-block ASCII whenever inline
-  graphics aren't reliably available (see
-  [QR rendering](#qr-rendering) above).
+Full screen catalogue with per-screen keybars and transitions:
+[`docs/screens.md`](docs/screens.md). Implementation constraints
+on the Ratatui side: [`docs/ratatui-notes.md`](docs/ratatui-notes.md).
 
 ## Security
 
