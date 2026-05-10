@@ -173,23 +173,11 @@ or `* remote · <server> · <alias>`.
 
 ### Welcome
 
-```text
-| zz-tui  ›  welcome                                                                                      o no profile
+The TUI starts on a welcome screen and walks you through the full
+setup. The animated demo below goes end-to-end: welcome → provider
+pick → OAuth device flow → folder probe → alias → encrypt → push.
 
-
-                                                    zz-drop  ·  setup
-                                              Multi-cloud file transfer CLI
-
-| › get started
-┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ ▍ LOCAL   this machine only · no recovery if lost                                                                    │
-│  > Create local container   new profiles-local.zz · pick a provider                                                   │
-│                                                                                                                      │
-│    Quit                                                                                                              │
-└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-                profiles live in ~/.config/zz-drop/. encrypted at rest. server cannot decrypt.
- ↑↓  select    ↵  confirm    q  quit
-```
+![zz-drop TUI walkthrough](https://raw.githubusercontent.com/Gibbio/zz-drop/main/.github/assets/tui-demo.gif)
 
 (With `--features remote` a REMOTE block also appears with
 *Add to remote container* and *Sign in to zz-drop.net*; the

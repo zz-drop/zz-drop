@@ -6,6 +6,7 @@ license = "TBD"
 description = "Ratatui-based setup and configuration UI for zz-drop"
 repository = "https://github.com/zz-drop/zz-drop-tui"
 publish = false
+exclude = [".github/"]
 
 [[bin]]
 name = "zz-tui"
