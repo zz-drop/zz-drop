@@ -2,7 +2,7 @@
 name = "zz-drop-tui"
 version = "0.0.1"
 edition = "2024"
-license = "TBD"
+license = "MIT OR Apache-2.0"
 description = "Ratatui-based setup and configuration UI for zz-drop"
 repository = "https://github.com/zz-drop/zz-drop-tui"
 publish = false
