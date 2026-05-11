@@ -119,6 +119,41 @@ issue fresh tokens.
   significantly less ergonomic than Drive's `drive.file`. We may
   re-evaluate in a future release.
 
+## Business tenants and Microsoft "verified publisher"
+
+If you sign in with a **work or school account** and your
+organisation enforces the [risk-based step-up consent
+policy](https://learn.microsoft.com/entra/identity/enterprise-apps/configure-risk-based-step-up-consent),
+the Microsoft consent screen may refuse to let the OneDrive setup
+proceed with a message like *"end users can't grant consent to
+this app because the publisher isn't verified"*. This is a
+Microsoft Entra policy that blocks any multitenant app registered
+after November 8, 2020 from being consented to by users outside
+its home tenant unless the publisher is verified through
+Microsoft's [Cloud Partner Program](https://learn.microsoft.com/entra/identity-platform/publisher-verification-overview).
+
+zz-drop's default OneDrive `client_id` is **not** publisher-verified
+and will not be — Microsoft's CPP enrolment is built around
+"legitimate business entities" with formal registration and
+domain-bound email, which is a poor fit for a single-maintainer
+open-source CLI. The same posture applies to
+[rclone](https://rclone.org/onedrive/), whose docs describe the
+identical workaround.
+
+**The workaround is to register your own Microsoft client_id.**
+Five minutes in the Azure portal: you create a one-off
+multitenant app on your own account (or your organisation's
+tenant), enable public-client flows, and rebuild zz-drop with
+the resulting `client_id` baked in via the build-time override
+`ZZ_DROP_ONEDRIVE_CLIENT_ID`. Step-by-step in
+[`docs/build.md`](build.md#building-with-your-own-oauth-client-ids).
+
+The default `client_id` works fine for personal Microsoft
+accounts (`@outlook.com`, `@hotmail.com`, `@live.com`) and for
+business tenants that haven't enabled the step-up consent policy
+— this section only matters when the consent screen actively
+blocks you.
+
 ## Revoking access
 
 To withdraw zz-drop's access at any time:
