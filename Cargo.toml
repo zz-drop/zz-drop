@@ -1,6 +1,6 @@
 [package]
 name = "zz-drop"
-version = "0.0.1-pre.1"
+version = "0.0.1-pre.3"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "CLI and local agent for zz-drop"
@@ -23,7 +23,7 @@ default = []
 remote = []
 
 [dependencies]
-zz-drop-core = { path = "../zz-drop-core" }
+zz-drop-core = { path = "zz-drop-core" }
 rustix = { version = "1", features = ["process", "net"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 rpassword = "7"
@@ -50,3 +50,13 @@ lto = true
 codegen-units = 1
 strip = "symbols"
 panic = "abort"
+
+# Cargo workspace: zz-drop is the CLI binary, zz-drop-tui ships
+# the `zz-tui` binary called from `zz c`, zz-drop-core is the
+# shared library. All three live here as regular subdirectories;
+# the previous multi-repo layout was consolidated 2026-05-12.
+# zz-drop-server-minimal stays in its own repo and depends on
+# zz-drop-core via git URL (transition pending).
+[workspace]
+members = [".", "zz-drop-core", "zz-drop-tui"]
+resolver = "3"

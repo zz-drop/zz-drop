@@ -7,10 +7,6 @@ members = ["cargo:."]
 cargo-dist-version = "0.31.0"
 # CI backends to support
 ci = "github"
-# Extra steps spliced into each build job. zz-drop depends on
-# `zz-drop-core` via `path = "../zz-drop-core"`; CI must check
-# out that sibling repo before `cargo build` runs.
-github-build-setup = "release-hooks/build-setup.yml"
 # The installers to generate for each app
 installers = ["shell", "homebrew"]
 # Homebrew tap to publish formulae to (auto-updated by cargo-dist
@@ -18,6 +14,15 @@ installers = ["shell", "homebrew"]
 tap = "zz-drop/homebrew-zz-drop"
 # Auto-publish to the tap as part of the release job.
 publish-jobs = ["homebrew"]
+# Also exercise homebrew publish on prereleases (`v0.x.y-pre.N`).
+# Remove or set to false later if you want stable-only formula
+# updates.
+publish-prereleases = true
+# Custom jobs spliced into release.yml after announce. Each entry
+# points to a reusable workflow (`workflow_call`) inside this
+# repo. `sign-release.yml` signs every release artifact with
+# minisign.
+post-announce-jobs = ["./sign-release"]
 # Target platforms to build apps for (Rust target-triple syntax).
 # Unix-only: the local agent uses Unix domain sockets and rustix
 # Unix-specific syscalls — Windows is out of scope for v1.

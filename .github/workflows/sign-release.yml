@@ -1,15 +1,24 @@
 name: Sign release artifacts
 
-# Triggered after cargo-dist's release.yml publishes the GitHub
-# Release. Downloads every artifact, signs each non-manifest file
-# with minisign, and uploads the resulting `.minisig` back to the
-# same release. Users verify with `minisign -Vm <file> -p
-# release-key.pub` against the public key committed at the repo
-# root.
+# Called from release.yml as a post-announce job (see
+# `post-announce-jobs` in dist-workspace.toml). Running inside the
+# same workflow run lets us reuse GITHUB_TOKEN — events fired by
+# GITHUB_TOKEN don't trigger downstream `release: published`
+# workflows, so a standalone `on: release: published` here would
+# never fire.
+#
+# Downloads every artifact, signs each non-manifest file with
+# minisign, and uploads the resulting `.minisig` back to the same
+# release. Verify with:
+#   minisign -Vm <file> -p release-key.pub
 
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      plan:
+        description: "dist-manifest JSON string from cargo-dist plan"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -19,7 +28,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       GH_TOKEN: ${{ github.token }}
-      TAG: ${{ github.event.release.tag_name }}
+      TAG: ${{ fromJson(inputs.plan).announcement_tag }}
     steps:
       - name: Install minisign
         run: sudo apt-get update && sudo apt-get install -y minisign
