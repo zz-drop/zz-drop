@@ -1756,7 +1756,7 @@ dependencies = [
 
 [[package]]
 name = "zz-drop"
-version = "0.0.1"
+version = "0.0.1-pre.1"
 dependencies = [
  "nix",
  "owo-colors",
