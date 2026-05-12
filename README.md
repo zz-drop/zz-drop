@@ -76,18 +76,11 @@ contextual suggestions. It doesn't just list verbs: it asks the
 local agent for the *actual* state of your data and ranks
 candidates accordingly.
 
-```text
-$ zz d <TAB>
-readme.md           — remote file
-report.pdf          — remote file
-docs/               — remote folder
+![zz-drop SACS in action](.github/assets/sacs-demo.gif)
 
-$ zz z <TAB>
-casa-nc             — last used
-gdrive-bright
-
-$ zz s ./<TAB>      → local files (standard shell glob)
-```
+`zz d <TAB>` shows remote files; `zz z <TAB>` shows the inner
+profiles inside your unlocked container; `zz s <TAB>` falls
+back to the local filesystem like every other CLI.
 
 The script itself is tiny (~30 lines per shell); the brain is
 the `zz` binary, so rebuilding the tool updates the suggestions
