@@ -7,7 +7,7 @@ Ratatui-based setup and configuration UI for the
 in the CLI (`zz file.md`). This binary is for setup, provider
 configuration, profile passphrase entry and recovery.
 
-![zz-drop TUI walkthrough](https://raw.githubusercontent.com/Gibbio/zz-drop/main/.github/assets/tui-demo.gif)
+![zz-drop TUI walkthrough](https://raw.githubusercontent.com/zz-drop/zz-drop/main/.github/assets/tui-demo.gif)
 
 ## Status
 
@@ -213,10 +213,10 @@ remote profile**, opt-in on **Create local container**, manual via
 
 Project-wide details, including honest non-goals and the
 vulnerability-disclosure pointer, live in
-[zz-drop/docs/security.md](https://github.com/Gibbio/zz-drop/blob/main/docs/security.md).
+[zz-drop/docs/security.md](https://github.com/zz-drop/zz-drop/blob/main/docs/security.md).
 The local agent specifics (which `zz-tui` does not run, but its CLI
 sibling does) are in
-[zz-drop/docs/agent.md](https://github.com/Gibbio/zz-drop/blob/main/docs/agent.md).
+[zz-drop/docs/agent.md](https://github.com/zz-drop/zz-drop/blob/main/docs/agent.md).
 
 ## Scope
 
@@ -248,7 +248,7 @@ cargo build --features remote
 
 The flag is temporary; it graduates default-on in v2 and is removed
 once the v2 line stabilises. See
-[zz-drop-core/docs/feature-flags.md](https://github.com/Gibbio/zz-drop-core/blob/main/docs/feature-flags.md).
+[zz-drop-core/docs/feature-flags.md](https://github.com/zz-drop/zz-drop-core/blob/main/docs/feature-flags.md).
 
 ## License
 
