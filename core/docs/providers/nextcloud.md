@@ -4,7 +4,7 @@ zz-drop's first supported destination, before Google Drive and
 OneDrive arrived. Talks to a Nextcloud server (self-hosted or
 managed) over its WebDAV endpoint. The on-disk and on-the-wire
 shapes documented here are stable; the implementation lives under
-`zz-drop-core/src/providers/nextcloud/`.
+`core/src/providers/nextcloud/`.
 
 ## What ships
 

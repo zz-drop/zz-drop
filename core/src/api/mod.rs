@@ -1,7 +1,7 @@
 //! Public HTTP API v1 surface.
 //!
 //! These types are wire DTOs. They mirror
-//! `zz-drop-core/docs/api/openapi.yaml` 1:1 — every field name, every
+//! `core/docs/api/openapi.yaml` 1:1 — every field name, every
 //! enum variant, and every error code must match. Server and client
 //! implementations both depend on this module: it is the single source
 //! of truth for the API in the Rust workspace.

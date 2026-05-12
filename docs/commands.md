@@ -2,7 +2,7 @@
 
 The **canonical** command table, output format and parser rule for the
 zz-drop project live upstream in the shared crate, at
-[`zz-drop-core/docs/commands.md`](../../zz-drop-core/docs/commands.md).
+[`core/docs/commands.md`](../../core/docs/commands.md).
 
 This file is a thin pointer: keep grammar changes in the canonical
 location to avoid drift between the binary and the spec.

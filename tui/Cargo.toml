@@ -30,7 +30,7 @@ remote = []
 
 [dependencies]
 ratatui = "0.30"
-zz-drop-core = { path = "../zz-drop-core" }
+zz-drop-core = { path = "../core" }
 url = "2"
 qrcode = "0.14"
 arboard = "3"

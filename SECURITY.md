@@ -23,7 +23,7 @@ the configured cloud provider (Nextcloud via WebDAV, Google Drive
 via OAuth 2.0 device flow); the API path to a
 `zz-drop.net`-compatible server is gated behind a Cargo feature
 `remote`, default-off in v1 (graduates default-on in v2 — see
-`zz-drop-core/docs/feature-flags.md`).
+`core/docs/feature-flags.md`).
 
 This repository's contribution to the project's security posture:
 
@@ -52,11 +52,11 @@ This repository's contribution to the project's security posture:
 - **No recovery if the container passphrase is lost** in v1. A
   v1.1 milestone introduces an opt-in BIP39 recovery key alongside
   the file-content E2EE work; the design is frozen in
-  [`../zz-drop-core/docs/file-encryption.md`](../zz-drop-core/docs/file-encryption.md).
+  [`../core/docs/file-encryption.md`](../core/docs/file-encryption.md).
 - **v1 ships local-only.** The `remote` feature is off by default;
   the default binary contains no network code that targets the
   `zz-drop.net` API and no `zz-drop.net` host string — see
-  `zz-drop-core/docs/feature-flags.md` for the lifecycle.
+  `core/docs/feature-flags.md` for the lifecycle.
 
 ## Pre-alpha hardening pass
 
@@ -80,7 +80,7 @@ cargo audit
   does not see, honest non-goals, threat model
 - [`docs/agent.md`](docs/agent.md) — local agent details: lifecycle,
   socket auth, memory model
-- [`../zz-drop-core/SECURITY.md`](../zz-drop-core/SECURITY.md) —
+- [`../core/SECURITY.md`](../core/SECURITY.md) —
   project-wide security policy
-- [`../zz-drop-core/docs/security-model.md`](../zz-drop-core/docs/security-model.md)
+- [`../core/docs/security-model.md`](../core/docs/security-model.md)
   — canonical security model document

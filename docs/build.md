@@ -18,7 +18,7 @@ git clone https://github.com/zz-drop/zz-drop-tui     # optional, only for `zz c`
 
 mkdir -p "$HOME/.local/bin"
 ln -sf "$ZZ_HOME/zz-drop/target/release/zz-drop"          "$HOME/.local/bin/zz-drop"
-ln -sf "$ZZ_HOME/zz-drop-tui/target/release/zz-drop-tui"  "$HOME/.local/bin/zz-drop-tui" 2>/dev/null
+ln -sf "$ZZ_HOME/tui/target/release/zz-drop-tui"  "$HOME/.local/bin/zz-drop-tui" 2>/dev/null
 command -v zz >/dev/null 2>&1 \
     && echo "note: 'zz' already on PATH at $(command -v zz); short alias not installed" \
     || ln -sf "$HOME/.local/bin/zz-drop" "$HOME/.local/bin/zz"
@@ -46,9 +46,9 @@ siblings under the same parent directory**. The parent itself
 
 ```
 $ZZ_HOME/
-├── zz-drop-core/   ← shared types, crypto, agent protocol     REQUIRED
+├── core/   ← shared types, crypto, agent protocol     REQUIRED
 ├── zz-drop/        ← CLI + agent (the binary you'll run)      REQUIRED
-└── zz-drop-tui/    ← TUI binary launched by `zz c`            OPTIONAL
+└── tui/    ← TUI binary launched by `zz c`            OPTIONAL
 ```
 
 The three repos are independent (no submodules). Clone in
@@ -93,7 +93,7 @@ Then `exec zsh` (or open a new terminal).
 mkdir -p "$HOME/.local/bin"
 
 ln -sf "$ZZ_HOME/zz-drop/target/release/zz-drop" "$HOME/.local/bin/zz-drop"
-ln -sf "$ZZ_HOME/zz-drop-tui/target/release/zz-drop-tui" "$HOME/.local/bin/zz-drop-tui" 2>/dev/null
+ln -sf "$ZZ_HOME/tui/target/release/zz-drop-tui" "$HOME/.local/bin/zz-drop-tui" 2>/dev/null
 
 if existing="$(command -v zz 2>/dev/null)"; then
     echo "note: 'zz' is already on PATH at $existing; short alias not installed"
@@ -231,7 +231,7 @@ rm -f ~/.config/fish/completions/zz.fish
 |----------------------------------------------------|-------------------------------------------------------------|--------------------------------------------------------------------------------------|
 | `cargo: command not found`                         | Rust not installed                                          | [rustup.rs](https://rustup.rs/), open new shell                                      |
 | `error: linker 'cc' not found` (Linux)             | C toolchain / OpenSSL headers missing                       | `apt install build-essential pkg-config libssl-dev` (or distro equivalent)           |
-| `failed to read … zz-drop-core/Cargo.toml`         | Repos not siblings                                          | Re-clone all three under the same `$ZZ_HOME`                                         |
+| `failed to read … core/Cargo.toml`         | Repos not siblings                                          | Re-clone all three under the same `$ZZ_HOME`                                         |
 | `zz: command not found` after install              | `~/.local/bin` not on `$PATH`                               | See "`~/.local/bin` on PATH" above                                                   |
 | `zz <TAB>` shows nothing                           | Completion script not loaded                                | zsh: ensure `fpath` includes `~/.zfunc` and `compinit` ran                           |
 | `zz <TAB>` lists but arrows do nothing             | `menu-select` widget not registered (stock macOS zsh)       | Add `zle -C menu-select .menu-select _main_complete` — see [`sacs.md`](./sacs.md)    |

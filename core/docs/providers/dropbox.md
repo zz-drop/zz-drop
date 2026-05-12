@@ -4,7 +4,7 @@ zz-drop's fourth supported destination, after Nextcloud / WebDAV,
 Google Drive, and OneDrive. Talks to Dropbox API v2 against any
 personal or paid Dropbox account. The on-disk and on-the-wire
 shapes documented here are stable; the implementation lives under
-`zz-drop-core/src/providers/dropbox/`.
+`core/src/providers/dropbox/`.
 
 ## What ships
 

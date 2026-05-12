@@ -11,7 +11,7 @@ Base:
 OpenAPI location in public repo:
 
 ```text
-zz-drop-core/docs/api/openapi.yaml
+core/docs/api/openapi.yaml
 ```
 
 ## Endpoints

@@ -1,5 +1,5 @@
 // Cross-checks the API DTOs against canonical JSON examples that mirror
-// the OpenAPI spec at `zz-drop-core/docs/api/openapi.yaml`. If any of
+// the OpenAPI spec at `core/docs/api/openapi.yaml`. If any of
 // these tests fail, either the wire format or the OpenAPI spec drifted
 // — fix both in the same change.
 

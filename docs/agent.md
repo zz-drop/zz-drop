@@ -38,7 +38,7 @@ Each connection must pass two checks:
    closed before any protocol message is processed.
 
 After both pass, the protocol from
-[`zz-drop-core/docs/agent-protocol.md`](../../zz-drop-core/docs/agent-protocol.md)
+[`core/docs/agent-protocol.md`](../../core/docs/agent-protocol.md)
 is used: postcard payload, 4-byte big-endian length prefix, 1 MiB frame
 limit, version `1`.
 
@@ -151,7 +151,7 @@ Use `scripts/dev-rebuild.sh` from the project root to:
 # add --profile dev to use debug builds for faster iteration
 ```
 
-A regression test (`zz-drop-core/tests/agent_proto::variant_discriminants_are_stable`)
+A regression test (`core/tests/agent_proto::variant_discriminants_are_stable`)
 locks the postcard discriminant byte for every existing variant
 of `AgentRequest` and `AgentResponse`. New variants must be
 appended at the bottom — inserting one between existing variants

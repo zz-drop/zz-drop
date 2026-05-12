@@ -2,7 +2,7 @@
 
 zz-drop's second supported destination, after Nextcloud / WebDAV.
 The on-disk and on-the-wire shapes documented here are stable; the
-implementation lives under `zz-drop-core/src/providers/google_drive/`.
+implementation lives under `core/src/providers/google_drive/`.
 
 ## What ships
 

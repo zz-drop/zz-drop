@@ -23,7 +23,7 @@ default = []
 remote = []
 
 [dependencies]
-zz-drop-core = { path = "zz-drop-core" }
+zz-drop-core = { path = "core" }
 rustix = { version = "1", features = ["process", "net"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 rpassword = "7"
@@ -58,5 +58,5 @@ panic = "abort"
 # zz-drop-server-minimal stays in its own repo and depends on
 # zz-drop-core via git URL (transition pending).
 [workspace]
-members = [".", "zz-drop-core", "zz-drop-tui"]
+members = [".", "core", "tui"]
 resolver = "3"

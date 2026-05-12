@@ -4,7 +4,7 @@ zz-drop's third supported destination, after Nextcloud / WebDAV and
 Google Drive. Talks to Microsoft Graph against personal Microsoft
 accounts and work / school accounts (multi-tenant). The on-disk
 and on-the-wire shapes documented here are stable; the implementation
-lives under `zz-drop-core/src/providers/onedrive/`.
+lives under `core/src/providers/onedrive/`.
 
 ## What ships
 

@@ -8,7 +8,7 @@ properties.
 ## What this passphrase is (and is not)
 
 - It encrypts the local `profile.zz` envelope (Argon2id KDF →
-  XChaCha20-Poly1305 AEAD, see `zz-drop-core/docs/profile-format.md`).
+  XChaCha20-Poly1305 AEAD, see `core/docs/profile-format.md`).
 - It is **never** sent to `zz-drop.net`.
 - It is **not** the Nextcloud login password.
 - It is **not** the Nextcloud "app password" (the wizard collected
@@ -123,12 +123,12 @@ editing.
 
 There is no recovery if the passphrase is lost. This is the same
 property as the public spec in
-`zz-drop-core/docs/profile-format.md` and is documented inline on the
+`core/docs/profile-format.md` and is documented inline on the
 screen.
 
 ## Test coverage
 
-`zz-drop-tui/tests/passphrase_screen.rs` covers state machine
+`tui/tests/passphrase_screen.rs` covers state machine
 transitions:
 
 - starts on the passphrase input field
@@ -145,7 +145,7 @@ transitions:
 - `Debug` redaction holds.
 
 The actual encryption + write round-trip is unit-tested in
-`zz-drop-core/tests/profile_crypto.rs`
+`core/tests/profile_crypto.rs`
 (`save_profile_zz_round_trip`, `save_profile_zz_sets_0600`,
 `load_profile_zz_with_wrong_passphrase_fails_with_aead`,
 `load_profile_zz_missing_file_is_io_error`).

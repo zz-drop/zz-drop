@@ -94,7 +94,7 @@ cached entry along the way regardless of `kind_filter`.
 
 ## Implementation notes (zz-drop-core reference)
 
-The reference implementation lives in `zz-drop-core/src/agent_proto/`,
+The reference implementation lives in `core/src/agent_proto/`,
 exposed via `zz_drop_core::agent_proto::*`.
 
 Wire format:

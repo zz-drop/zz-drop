@@ -17,7 +17,7 @@ default-on → removed), update the row here in the same commit.
 
 - `zz-drop-tui::api_client` (the HTTP module)
 - the `account_email_input` / `push_alias_input` request handlers
-  in `zz-drop-tui/src/main.rs`
+  in `tui/src/main.rs`
 - the REMOTE block in the welcome menu (`OpenRemote`,
   `ConfigureRemote`, `SignIn`)
 - the default value of `App::api_base` (the `https://zz-drop.net`

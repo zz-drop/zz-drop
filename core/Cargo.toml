@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Shared core types and protocols for zz-drop"
-repository = "https://github.com/zz-drop/zz-drop-core"
+repository = "https://github.com/zz-drop/zz-drop"
 publish = false
 
 [features]

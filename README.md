@@ -231,7 +231,7 @@ cargo build --features remote
 
 The flag is temporary: it graduates default-on in v2 and gets
 removed once the v2 line stabilises. See
-[`zz-drop-core/docs/feature-flags.md`](../zz-drop-core/docs/feature-flags.md)
+[`core/docs/feature-flags.md`](../core/docs/feature-flags.md)
 for the full inventory.
 
 ## Output policy
@@ -328,7 +328,7 @@ A missing config file is treated as defaults. A malformed config
 file is a hard error — fix or delete it.
 
 The full schema is documented in
-[`zz-drop-core/docs/config.md`](../zz-drop-core/docs/config.md).
+[`core/docs/config.md`](../core/docs/config.md).
 
 ## Security
 
@@ -367,7 +367,7 @@ Local agent keeps the decrypted container in RAM only, behind a
 per-user Unix socket with peer-UID + 32-byte token check. No log
 file, no telemetry. A pre-alpha hardening pass (cargo audit, secret
 log review, agent socket review, profile crypto review) ran on
-2026-05-03 — see `zz-drop-core/SECURITY.md` for the headline.
+2026-05-03 — see `core/SECURITY.md` for the headline.
 
 Full details — including honest non-goals (filenames, traffic
 timing, forensic erasure) and a vulnerability-disclosure pointer —

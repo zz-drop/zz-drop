@@ -110,9 +110,9 @@ fresh token, fresh URL, fresh poll loop.
 
 ## Test coverage
 
-`zz-drop-tui/tests/login_flow_ui.rs` exercises the state machine
+`tui/tests/login_flow_ui.rs` exercises the state machine
 without touching the network: navigation in/out of the screen,
 `q`/`u`/`o`/`c` key dispatch, modal handling, redaction of the
 `apply_login_flow_done` credentials. The actual HTTP round-trip is
-unit-tested in `zz-drop-core/src/providers/nextcloud/login_flow.rs`
+unit-tested in `core/src/providers/nextcloud/login_flow.rs`
 on representative server payloads.

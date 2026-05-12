@@ -205,7 +205,7 @@ not need to be re-shown to the user.
 ## Test vectors
 
 The implementation ships test vectors under
-`zz-drop-core/tests/vectors/` once v1.1 lands:
+`core/tests/vectors/` once v1.1 lands:
 
 - `v1_passphrase_known.profile.zz` + plaintext passphrase in
   a sibling text file (`v1_passphrase.txt`).

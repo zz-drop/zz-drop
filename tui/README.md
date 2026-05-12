@@ -248,7 +248,7 @@ cargo build --features remote
 
 The flag is temporary; it graduates default-on in v2 and is removed
 once the v2 line stabilises. See
-[zz-drop-core/docs/feature-flags.md](https://github.com/zz-drop/zz-drop-core/blob/main/docs/feature-flags.md).
+[core/docs/feature-flags.md](https://github.com/zz-drop/core/blob/main/docs/feature-flags.md).
 
 ## License
 
