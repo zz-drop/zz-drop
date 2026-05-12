@@ -8,7 +8,7 @@ properties.
 ## What this passphrase is (and is not)
 
 - It encrypts the local `profile.zz` envelope (Argon2id KDF →
-  XChaCha20-Poly1305 AEAD, see `core/docs/profile-format.md`).
+  XChaCha20-Poly1305 AEAD, see `profile-format.md`).
 - It is **never** sent to `zz-drop.net`.
 - It is **not** the Nextcloud login password.
 - It is **not** the Nextcloud "app password" (the wizard collected
@@ -123,7 +123,7 @@ editing.
 
 There is no recovery if the passphrase is lost. This is the same
 property as the public spec in
-`core/docs/profile-format.md` and is documented inline on the
+`profile-format.md` and is documented inline on the
 screen.
 
 ## Test coverage

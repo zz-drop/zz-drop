@@ -1,111 +1,98 @@
-# zz-drop commands
+# zz-drop CLI commands
 
-The **canonical** command table, output format and parser rule for the
-zz-drop project live upstream in the shared crate, at
-[`core/docs/commands.md`](../../core/docs/commands.md).
+Canonical command table for the `zz` binary. The user-facing
+manual with examples lives in
+[`zz-drop/COMMANDS.md`](../COMMANDS.md); this page is
+the spec.
 
-This file is a thin pointer: keep grammar changes in the canonical
-location to avoid drift between the binary and the spec.
+## Reserved verbs
 
-User-facing manual with examples:
-[`COMMANDS.md`](../COMMANDS.md).
+| Verb | Args | Meaning |
+|---|---|---|
+| (none) | 1+ paths | Upload (default — first non-reserved token wins) |
+| `s` | 1+ paths | Upload (explicit alias of the default) |
+| `d` | 1+ remote names | Download |
+| `z` | none / `local` / `remote` | Unlock the active container into the agent |
+| `q` | — | Lock (zeroize the in-RAM container) |
+| `w` | — | Wipe local zz-drop state (with typed `y` confirmation) |
+| `c` | — | Launch the configuration TUI (`zz-tui` on `$PATH`) |
+| `f` | — | Doctor / diagnostics |
 
-## Implementation in this repository
+## Bulk variants — `s` / `d` with the `a` modifier
 
-This binary's parser is implemented in `src/cli/parser.rs` and
-exposes `zz_drop::parse_args` to the integration tests in
-`tests/cli_parser.rs`.
+`a` switches to bulk mode: a single positional `<dir>` argument
+is required (the operator types `.` for cwd).
 
-The grammar in this repository matches the canonical table:
+| Verb | Args | Meaning |
+|---|---|---|
+| `sa` | `<dir>` | Upload top-level regular files of `<dir>` (non-recursive) |
+| `sar` | `<dir>` | Upload all files under `<dir>` (recursive, preserves relative path) |
+| `da` | `<dest>` | Download all top-level remote files into `<dest>` |
+| `dar` | `<dest>` | Download the remote tree into `<dest>` (recursive) |
 
-- atom verbs (`q`, `w`, `z`, `c`, `f`)
-- composite verbs `s` and `d` with a set of single-letter
-  modifiers from `{a, r, x}`; `e` is parsed but rejected with a
-  v1.1 message
-- if the first argument exactly matches a reserved verb (or its
-  composite shape) it is the command; otherwise everything is
-  treated as upload paths
+## Modifiers
+
+The composite verbs `s` and `d` accept a *set* of single-letter
+modifiers in any order. Set semantics: `sar` ≡ `sra`, `sarx` ≡
+`sxar` ≡ `sxra`, etc.
+
+| Letter | On `s` | On `d` | v1 status |
+|---|---|---|---|
+| `a` | bulk: needs `<dir>` | bulk: needs `<dest>` | implemented |
+| `r` | recurse (with `a` only) | recurse (with `a` only) | implemented |
+| `x` | zstd-compress; bundle as `.tar.zst` when paired with `a` | decompress (and extract `.tar.zst` into a sibling dir) | implemented for single-file (`sx` / `dx`) and bundle upload (`sax` / `sarx`); bulk decompress (`dax` / `darx`) returns `EXIT_NOT_IMPLEMENTED` |
+| `e` | encrypt with file-content E2EE | (no `e` on `d` — download is always magic-detected) | rejected with explicit "coming in v1.1" message |
+
+`r` without `a` is rejected (`zz sr` / `zz drx` → `unknown
+modifier r`). Duplicate letters are rejected (`zz saa` →
+`modifier a repeated`).
+
+## Pipeline (deterministic, regardless of letter order)
+
+**Upload (`s` family):**
+
+```
+file(s)  →  [tar bundle if (a or ar) and x]
+         →  [zstd if x]
+         →  upload as <name>(.zst|.tar.zst)
+```
+
+**Download (`d` family):**
+
+```
+remote bytes
+  → [zstd-decompress if x and bytes start with zstd magic]
+  → [extract into sibling dir if decompressed bytes have tar ustar magic at offset 257]
+  → write
+```
+
+Compression always precedes encryption (when `e` graduates in
+v1.1) — encrypted bytes are high-entropy and won't compress
+further.
+
+## Parser rule
+
+If the first argument exactly matches a reserved verb (or one
+of the composite forms `s[a r x]+` / `d[a r x]+`), it is the
+command. Otherwise the entire argv is treated as upload paths.
+
+To upload a file whose name happens to match a verb:
+
+```bash
+zz ./z
+zz ./w
+```
 
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
-| `0` | success |
-| `2` | usage error (missing args, unknown command shape) |
-| `3` | command recognized but not implemented yet |
-| `5` | agent unreachable (socket missing, refused, handshake failed) |
-| `6` | profile not found |
-| `7` | decryption failed (wrong passphrase or corrupted container) |
-| `8` | wipe cancelled |
-| `9` | provider error or batch with at least one failure |
-| `127` | `zz c` could not find or launch the `zz-tui` binary on PATH |
-
-### File commands need an unlocked agent
-
-Every file command resolves the active inner profile by talking
-to the local agent. If the agent is not running or the container
-is locked, the command prints `failed: locked` + `run: zz z` and
-exits with `5`.
-
-### Skip rules
-
-`zz <file>` silently **skips** without failing the batch:
-
-- dotfiles (basename starts with `.`)
-- symlinks (no follow)
-- directories
-- non-regular files (block / char / fifo / socket)
-
-The same rules apply to `zz sa <dir>` / `zz sar <dir>`: dotdirs
-are not descended into, symlinks are never followed.
-
-### Batch behavior
-
-- per-file errors do not abort the batch — every file is attempted
-- the exit code is `0` if all files succeeded, `9` if at least one
-  failed; skipped files don't count as failures
-- output uses the formats pinned by the output module:
-  ```text
-  uploaded   readme.md 12 KiB → casa-nc · cloud.example.org/zz-drop
-  downloaded report.pdf 1.5 MiB ← casa-nc · cloud.example.org/zz-drop
-  failed     readme.md not found
-  ```
-
-### Path semantics
-
-- `zz <file>` — `<file>` is a local path; the remote name is its
-  basename. Subdirectories on the local side are not preserved.
-- `zz sar <dir>` — preserves the local directory structure on
-  the remote.
-- `zz d <name>` — `<name>` may include `/`; the file is saved
-  with its basename in the current directory.
-- `zz z <email>` / `zz z <alias>` — pull the encrypted profile
-  container from the configured zz-drop server, persist it as
-  `profiles-remote.zz`, then chain into the same unlock dance as
-  `zz z remote`. The form with `@` in it is treated as an account
-  email; otherwise it is treated as a stored alias (which in v1
-  requires a saved session — not yet supported, surfaced as a
-  clear error). Server URL is read from `$ZZ_SERVER_URL`. Gated
-  behind the `remote` Cargo feature (default-off in v1) — the
-  parser accepts the form in every build, the executor surfaces
-  "remote not enabled" if the feature is off.
-- `zz d <pattern>` — when `<pattern>` contains `*` or `?`, the
-  pattern is expanded server-side: zz lists the parent directory
-  of the pattern (root if the pattern has no `/`), matches each
-  basename against the pattern, and downloads every match. The
-  shell can't help here — its glob engine only sees the local
-  filesystem — so the operator must keep the pattern out of the
-  shell's globbing reach (quote it: `zz d 'Q*'`, or install the
-  per-shell wrapper documented in
-  [`sacs.md`](./sacs.md#per-shell-wrapper-for-zz-d-pattern-download-glob)).
-  Path-segment globs (`*` before the last `/`) are not supported
-  in v1; brackets / character classes are also not supported.
-- `zz dar <dest>` — mirrors the remote tree under `<dest>`.
-
-### Collision policy
-
-The current default policy is `Rename`: the first uploaded file
-keeps its name; subsequent uploads with the same basename get a
-unique suffix (format pinned in `zz-drop-core::providers::nextcloud::collision::rename_with_suffix`).
-Per-profile collision policy is selectable from the TUI and
-sealed into the encrypted container.
+| `0` | Success |
+| `2` | Usage error |
+| `3` | Recognized but not implemented yet |
+| `5` | Agent unreachable |
+| `6` | Profile not found |
+| `7` | Decryption failed |
+| `8` | Wipe cancelled |
+| `9` | Provider error (Nextcloud / Google Drive / etc.) |
+| `127` | `zz c` could not find `zz-tui` on `$PATH` |

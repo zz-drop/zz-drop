@@ -32,7 +32,7 @@ Before modifying anything in this repository, read:
 - `README.md`
 - `SECURITY.md`
 - `CONTRIBUTING.md` if present
-- relevant files under `docs/`, `core/docs/`, `tui/docs/`
+- relevant files under `docs/`
 - this `AGENTS.md`
 
 If the maintainer has provided additional project context for the

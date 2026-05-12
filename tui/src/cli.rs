@@ -15,23 +15,23 @@ use zz_drop_core::providers::oauth::{DeviceFlowClient, PasteCodeFlow, PollOutcom
 use zz_drop_core::providers::onedrive::{
     self as onedrive_core, OneDriveAuth, OneDriveClient, OneDriveProfile,
 };
-use zz_drop_tui::app::App;
-use zz_drop_tui::qr::GraphicsCtx;
-use zz_drop_tui::theme::Theme;
-use zz_drop_tui::ui;
+use crate::app::App;
+use crate::qr::GraphicsCtx;
+use crate::theme::Theme;
+use crate::ui;
 #[cfg(feature = "remote")]
-use zz_drop_tui::api_client;
+use crate::api_client;
 #[cfg(feature = "remote")]
-use zz_drop_tui::api_client::PushLoginOutcome;
-use zz_drop_tui::upload_test::{
+use crate::api_client::PushLoginOutcome;
+use crate::upload_test::{
     self, LoginFlowInitOutcome, LoginFlowPollOutcome, ProbeCleanupOutcome, ProbeEnsureOutcome,
     ProbeStepOutcome, SaveProfileOutcome,
 };
-use zz_drop_tui::wizard::{GoogleDriveSetupStage, LoginFlowStage, OneDriveSetupStage};
+use crate::wizard::{GoogleDriveSetupStage, LoginFlowStage, OneDriveSetupStage};
 
 const LOGIN_FLOW_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
-fn main() -> ExitCode {
+pub fn entry_point() -> ExitCode {
     if !io::stdout().is_terminal() {
         eprintln!("zz-tui requires an interactive terminal");
         return ExitCode::from(2);
@@ -810,7 +810,7 @@ fn perform_add_inner_profile(
     }
 
     let (providers, default_target) = match app.state.provider_kind {
-        zz_drop_tui::wizard::ProviderKind::Nextcloud => {
+        crate::wizard::ProviderKind::Nextcloud => {
             let nc = NextcloudProfile {
                 server_url: app.state.server_url.clone(),
                 username: app.state.username.clone(),
@@ -821,7 +821,7 @@ fn perform_add_inner_profile(
             };
             (vec![ProviderProfile::Nextcloud(nc)], "nextcloud")
         }
-        zz_drop_tui::wizard::ProviderKind::GoogleDrive => {
+        crate::wizard::ProviderKind::GoogleDrive => {
             let gd = &app.gdrive_setup;
             if gd.access_token.is_empty() || gd.refresh_token.is_empty() {
                 return Err("google drive setup did not yield tokens".into());
@@ -846,7 +846,7 @@ fn perform_add_inner_profile(
             };
             (vec![ProviderProfile::GoogleDrive(gdp)], "google_drive")
         }
-        zz_drop_tui::wizard::ProviderKind::OneDrive => {
+        crate::wizard::ProviderKind::OneDrive => {
             let od = &app.onedrive_setup;
             if od.access_token.is_empty() || od.refresh_token.is_empty() {
                 return Err("onedrive setup did not yield tokens".into());
@@ -871,7 +871,7 @@ fn perform_add_inner_profile(
             };
             (vec![ProviderProfile::OneDrive(odp)], "onedrive")
         }
-        zz_drop_tui::wizard::ProviderKind::Dropbox => {
+        crate::wizard::ProviderKind::Dropbox => {
             let db = &app.dropbox_setup;
             if db.access_token.is_empty() || db.refresh_token.is_empty() {
                 return Err("dropbox setup did not yield tokens".into());
@@ -942,7 +942,7 @@ fn perform_add_inner_profile(
     // an OAuth token refresh) — silently overwriting the new
     // container.
     if let Some(paths) = agent_paths() {
-        zz_drop_tui::agent_kill::try_update_profile_set(
+        crate::agent_kill::try_update_profile_set(
             &paths.agent_socket,
             &paths.token_file,
             &new_set,
@@ -1015,7 +1015,7 @@ fn perform_delete_inner_profile(
         {
             let _ = std::fs::remove_file(&sidecar);
         }
-        zz_drop_tui::agent_kill::try_update_profile_set(
+        crate::agent_kill::try_update_profile_set(
             &paths.agent_socket,
             &paths.token_file,
             &new_set,
@@ -1068,7 +1068,7 @@ fn full_wipe() -> Result<(), String> {
     )
     .map_err(|e| format!("could not resolve paths: {e}"))?;
 
-    zz_drop_tui::agent_kill::try_exit_agent(&paths.agent_socket, &paths.token_file);
+    crate::agent_kill::try_exit_agent(&paths.agent_socket, &paths.token_file);
 
     let _ = std::fs::remove_file(&paths.profiles_local_file);
     let _ = std::fs::remove_file(&paths.profiles_remote_file);

@@ -276,6 +276,6 @@ zz --help          # static cheat sheet (or zz -h)
 - [`docs/security.md`](docs/security.md) — threat model, what the server sees / does not see.
 - [`docs/agent.md`](docs/agent.md) — local agent: lifecycle, socket auth.
 - [`docs/sacs.md`](docs/sacs.md) — shell completion: states, ranking, NDJSON schema.
-- [`../core/docs/commands.md`](../core/docs/commands.md) — short canonical pointer for the spec table.
-- [`../core/docs/file-encryption.md`](../core/docs/file-encryption.md) — `.zzd` blob format (v1.1 file E2EE).
-- [`../core/docs/feature-flags.md`](../core/docs/feature-flags.md) — Cargo feature lifecycle (`remote`).
+- [`docs/commands.md`](docs/commands.md) — short canonical pointer for the spec table.
+- [`docs/file-encryption.md`](docs/file-encryption.md) — `.zzd` blob format (v1.1 file E2EE).
+- [`docs/feature-flags.md`](docs/feature-flags.md) — Cargo feature lifecycle (`remote`).

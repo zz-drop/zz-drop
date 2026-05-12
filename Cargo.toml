@@ -24,6 +24,7 @@ remote = []
 
 [dependencies]
 zz-drop-core = { path = "core" }
+zz-drop-tui = { path = "tui" }
 rustix = { version = "1", features = ["process", "net"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 rpassword = "7"

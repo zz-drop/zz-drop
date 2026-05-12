@@ -3,3 +3,4 @@
 Cargo.lock.bak
 
 .DS_Store
+zz_test_payload*.txt

@@ -16,3 +16,6 @@ pub mod tui_widgets;
 pub mod ui;
 pub mod upload_test;
 pub mod wizard;
+
+pub mod cli;
+pub use cli::entry_point;

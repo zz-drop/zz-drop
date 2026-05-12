@@ -352,7 +352,7 @@ Fields:
 Remote candidates come from a new agent endpoint added in protocol
 version 1 (additive variant — the older request/response set still
 round-trips unchanged). The wire-level details are documented in
-[`core/docs/agent-protocol.md`](../../core/docs/agent-protocol.md).
+[`agent-protocol.md`](./agent-protocol.md).
 
 Operationally:
 

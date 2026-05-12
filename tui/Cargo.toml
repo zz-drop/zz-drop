@@ -9,13 +9,6 @@ homepage = "https://zz-drop.net"
 publish = false
 exclude = [".github/"]
 
-[package.metadata.dist]
-dist = true
-
-[[bin]]
-name = "zz-tui"
-path = "src/main.rs"
-
 [dev-dependencies]
 tempfile = "3"
 

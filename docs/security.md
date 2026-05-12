@@ -154,7 +154,7 @@ GitHub issues are fine.
   socket auth.
 - [`docs/commands.md`](commands.md) — full command grammar +
   exit codes.
-- [`../core/docs/profile-format.md`](../../core/docs/profile-format.md)
+- [`./profile-format.md`](./profile-format.md)
   — `profile.zz` envelope spec.
-- [`../core/docs/security-model.md`](../../core/docs/security-model.md)
+- [`./security-model.md`](./security-model.md)
   — project-wide security model.

@@ -38,7 +38,7 @@ Each connection must pass two checks:
    closed before any protocol message is processed.
 
 After both pass, the protocol from
-[`core/docs/agent-protocol.md`](../../core/docs/agent-protocol.md)
+[`agent-protocol.md`](./agent-protocol.md)
 is used: postcard payload, 4-byte big-endian length prefix, 1 MiB frame
 limit, version `1`.
 

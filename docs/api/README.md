@@ -11,7 +11,7 @@ Base:
 OpenAPI location in public repo:
 
 ```text
-core/docs/api/openapi.yaml
+./openapi.yaml
 ```
 
 ## Endpoints
