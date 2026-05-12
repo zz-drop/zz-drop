@@ -64,13 +64,47 @@ are binary (`KiB` / `MiB` / `GiB`). Colors only on a TTY, with
 - **Local per-user agent** in the same binary: holds the
   decrypted profile in RAM only, TTL 10 min, idle locked-exit
   after 5 min, Unix socket bound per-UID.
-- **State-aware shell completion** (SACS): `zz d <TAB>` shows
-  your remote files; `zz s <TAB>` shows local ones;
-  `zz z <TAB>` shows your inner profiles. zsh / bash / fish.
 - **Composable verb grammar** for power users:
   `zz sx file.md` (zstd compress), `zz sa dir/` (bulk
   top-level), `zz sar dir/` (recursive), `zz sarx dir/`
   (recursive + tar.zst). The `d` family mirrors it.
+
+## TAB completion that knows your state
+
+`zz` ships its own shell completion — SACS, state-aware
+contextual suggestions. It doesn't just list verbs: it asks the
+local agent for the *actual* state of your data and ranks
+candidates accordingly.
+
+```text
+$ zz d <TAB>
+readme.md           — remote file
+report.pdf          — remote file
+docs/               — remote folder
+
+$ zz z <TAB>
+casa-nc             — last used
+gdrive-bright
+
+$ zz s ./<TAB>      → local files (standard shell glob)
+```
+
+The script itself is tiny (~30 lines per shell); the brain is
+the `zz` binary, so rebuilding the tool updates the suggestions
+— the script never changes. zsh styling (group headers, menu
+select, filename colors) is opt-in via six lines in `~/.zshrc`,
+scoped to `zz` only so it leaves `git`, `ls`, `cd`'s TAB
+behaviour untouched.
+
+```bash
+zz --completions bash | source
+zz --completions zsh  > ~/.zfunc/_zz       # then `compinit`
+zz --completions fish > ~/.config/fish/completions/zz.fish
+```
+
+Full installation guide, zsh styling block and the
+download-glob wrapper for `zz d 'Q*'`:
+[`docs/sacs.md`](docs/sacs.md).
 
 ## TUI
 
