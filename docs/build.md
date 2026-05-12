@@ -9,9 +9,9 @@ completion. No prior Rust knowledge needed beyond `cargo`.
 export ZZ_HOME="$HOME/zz-project"           # any directory; the three repos must end up siblings inside it
 mkdir -p "$ZZ_HOME" && cd "$ZZ_HOME"
 
-git clone https://github.com/Gibbio/zz-drop-core
-git clone https://github.com/Gibbio/zz-drop
-git clone https://github.com/Gibbio/zz-drop-tui     # optional, only for `zz c`
+git clone https://github.com/zz-drop/zz-drop-core
+git clone https://github.com/zz-drop/zz-drop
+git clone https://github.com/zz-drop/zz-drop-tui     # optional, only for `zz c`
 
 ( cd zz-drop     && cargo build --release )
 ( cd zz-drop-tui && cargo build --release ) 2>/dev/null
@@ -58,9 +58,9 @@ parallel:
 export ZZ_HOME="$HOME/zz-project"   # change to taste
 mkdir -p "$ZZ_HOME" && cd "$ZZ_HOME"
 
-git clone https://github.com/Gibbio/zz-drop-core
-git clone https://github.com/Gibbio/zz-drop
-git clone https://github.com/Gibbio/zz-drop-tui   # skip for CLI-only setup
+git clone https://github.com/zz-drop/zz-drop-core
+git clone https://github.com/zz-drop/zz-drop
+git clone https://github.com/zz-drop/zz-drop-tui   # skip for CLI-only setup
 ```
 
 ## Build

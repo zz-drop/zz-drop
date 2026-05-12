@@ -27,13 +27,13 @@ jobs:
       - name: Checkout zz-drop-core sibling
         uses: actions/checkout@v4
         with:
-          repository: Gibbio/zz-drop-core
+          repository: zz-drop/zz-drop-core
           path: zz-drop-core
 
       - name: Checkout zz-drop-tui sibling
         uses: actions/checkout@v4
         with:
-          repository: Gibbio/zz-drop-tui
+          repository: zz-drop/zz-drop-tui
           path: zz-drop-tui
 
       - name: Install Rust toolchain
