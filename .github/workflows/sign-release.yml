@@ -1,0 +1,55 @@
+name: Sign release artifacts
+
+# Triggered after cargo-dist's release.yml publishes the GitHub
+# Release. Downloads every artifact, signs each non-manifest file
+# with minisign, and uploads the resulting `.minisig` back to the
+# same release. Users verify with `minisign -Vm <file> -p
+# release-key.pub` against the public key committed at the repo
+# root.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  sign:
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - name: Install minisign
+        run: sudo apt-get update && sudo apt-get install -y minisign
+
+      - name: Download release artifacts
+        run: |
+          mkdir -p artifacts
+          gh release download "$TAG" -R "${{ github.repository }}" -D artifacts
+          ls -la artifacts
+
+      - name: Sign artifacts
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          keyfile="$(mktemp)"
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$keyfile"
+          trap 'shred -u "$keyfile" 2>/dev/null || rm -f "$keyfile"' EXIT
+          cd artifacts
+          for f in *; do
+            case "$f" in
+              *.minisig|*.json) continue ;;
+            esac
+            [ -f "$f" ] || continue
+            echo "Signing $f"
+            minisign -Sm "$f" -s "$keyfile" < /dev/null
+          done
+          ls -la *.minisig
+
+      - name: Upload signatures
+        run: |
+          cd artifacts
+          gh release upload "$TAG" *.minisig -R "${{ github.repository }}" --clobber
