@@ -25,7 +25,9 @@ permissions:
 
 jobs:
   sign:
-    runs-on: ubuntu-22.04
+    # 24.04 (Noble) is the first LTS that has `minisign` in its
+    # default apt repos; 22.04 (Jammy) doesn't ship it.
+    runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ fromJson(inputs.plan).announcement_tag }}

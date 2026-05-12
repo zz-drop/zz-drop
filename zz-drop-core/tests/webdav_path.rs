@@ -1,4 +1,6 @@
-use zz_drop_core::providers::nextcloud::collision::rename_with_suffix;
+use zz_drop_core::providers::nextcloud::collision::{
+    rename_with_suffix, rename_with_suffix_at,
+};
 use zz_drop_core::providers::nextcloud::path::{
     PathError, encode_path, encode_remote_root, encode_segment, validate_filename,
 };
@@ -120,6 +122,12 @@ fn encode_remote_root_rejects_traversal() {
 
 // --- collision rename -------------------------------------------------
 
+// Suffix policy switched from Windows-style ` (N)` to ISO-8601
+// basic UTC (`-YYYYMMDDTHHMMSSZ`) — see
+// `providers/nextcloud/collision.rs` rationale. Tests use the
+// deterministic `_at` seam with a fixed epoch so assertions are
+// stable. Epoch 0 = `1970-01-01T00:00:00Z` → `19700101T000000Z`.
+
 #[test]
 fn rename_zero_is_identity() {
     assert_eq!(rename_with_suffix("foo.md", 0), "foo.md");
@@ -127,26 +135,41 @@ fn rename_zero_is_identity() {
 }
 
 #[test]
-fn rename_appends_index_before_extension() {
-    assert_eq!(rename_with_suffix("foo.md", 1), "foo (1).md");
-    assert_eq!(rename_with_suffix("foo.md", 12), "foo (12).md");
+fn rename_appends_iso_timestamp_before_extension() {
+    assert_eq!(
+        rename_with_suffix_at("foo.md", 1, 0),
+        "foo-19700101T000000Z.md"
+    );
+    assert_eq!(
+        rename_with_suffix_at("foo.md", 12, 0),
+        "foo-19700101T000000Z-12.md"
+    );
 }
 
 #[test]
 fn rename_no_extension_appends_at_end() {
-    assert_eq!(rename_with_suffix("README", 1), "README (1)");
+    assert_eq!(
+        rename_with_suffix_at("README", 1, 0),
+        "README-19700101T000000Z"
+    );
 }
 
 #[test]
 fn rename_dotfile_treated_as_no_extension() {
     // Per std::path::file_stem, ".bashrc" has stem ".bashrc" and no
     // extension. We follow that convention.
-    assert_eq!(rename_with_suffix(".bashrc", 1), ".bashrc (1)");
+    assert_eq!(
+        rename_with_suffix_at(".bashrc", 1, 0),
+        ".bashrc-19700101T000000Z"
+    );
 }
 
 #[test]
 fn rename_compound_extension_renames_only_outermost() {
-    assert_eq!(rename_with_suffix("foo.tar.gz", 1), "foo.tar (1).gz");
+    assert_eq!(
+        rename_with_suffix_at("foo.tar.gz", 1, 0),
+        "foo.tar-19700101T000000Z.gz"
+    );
 }
 
 // --- basic auth header ------------------------------------------------
