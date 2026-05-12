@@ -8,6 +8,9 @@ repository = "https://github.com/zz-drop/zz-drop-tui"
 publish = false
 exclude = [".github/"]
 
+[package.metadata.dist]
+dist = true
+
 [[bin]]
 name = "zz-tui"
 path = "src/main.rs"
