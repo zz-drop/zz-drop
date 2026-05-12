@@ -42,15 +42,6 @@ directories = "6"
 getrandom = "0.2"
 rustix = { version = "1", features = ["process"] }
 
-# Size-tuned profile for shipping a release. Smaller binary at the
-# cost of slower compile (~3× the default release). Use it from the
-# release pipeline; day-to-day work stays on `cargo build --release`.
-#
-#   cargo build --profile dist --bin zz-tui
-[profile.dist]
-inherits = "release"
-opt-level = "z"
-lto = true
-codegen-units = 1
-strip = "symbols"
-panic = "abort"
+# The `dist` release profile is defined at the workspace root
+# (../Cargo.toml). Cargo ignores per-member [profile.*] sections.
+
