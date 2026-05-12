@@ -1,0 +1,30 @@
+[workspace]
+members = ["cargo:."]
+
+# Config for 'dist'
+[dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.31.0"
+# CI backends to support
+ci = "github"
+# Extra steps spliced into each build job. zz-drop depends on
+# `zz-drop-core` via `path = "../zz-drop-core"`; CI must check
+# out that sibling repo before `cargo build` runs.
+github-build-setup = "release-hooks/build-setup.yml"
+# The installers to generate for each app
+installers = ["shell", "homebrew"]
+# Homebrew tap to publish formulae to (auto-updated by cargo-dist
+# on each release).
+tap = "zz-drop/homebrew-zz-drop"
+# Auto-publish to the tap as part of the release job.
+publish-jobs = ["homebrew"]
+# Target platforms to build apps for (Rust target-triple syntax).
+# Unix-only: the local agent uses Unix domain sockets and rustix
+# Unix-specific syscalls — Windows is out of scope for v1.
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"
+# Where to host releases
+hosting = "github"
+# Whether to install an updater program
+install-updater = false

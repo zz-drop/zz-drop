@@ -5,8 +5,12 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "CLI and local agent for zz-drop"
 repository = "https://github.com/zz-drop/zz-drop"
+homepage = "https://zz-drop.net"
 publish = false
 exclude = [".github/"]
+
+[package.metadata.dist]
+dist = true
 
 [features]
 # v1 ships local-only. Anything that talks to `zz-drop.net`

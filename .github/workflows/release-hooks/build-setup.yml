@@ -1,0 +1,14 @@
+# Spliced into each cargo-dist build job after the default
+# checkout of zz-drop. Brings the path-dep `zz-drop-core` into
+# place as a sibling so `cargo build` can resolve
+# `path = "../zz-drop-core"` against a parent of $GITHUB_WORKSPACE.
+- name: Checkout zz-drop-core sibling for path-dep
+  shell: bash
+  run: |
+    set -euo pipefail
+    parent="$(dirname "${{ github.workspace }}")"
+    cd "$parent"
+    if [ ! -d zz-drop-core ]; then
+      git clone --depth 1 --branch main \
+        https://github.com/zz-drop/zz-drop-core.git zz-drop-core
+    fi
