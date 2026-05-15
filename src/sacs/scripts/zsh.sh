@@ -7,6 +7,56 @@
 # `zz __complete`. Any time the grammar changes, rebuild zz;
 # this file does not.
 
+# Auto-styling — turn SACS's NDJSON `kind`/`description` metadata
+# into headed groups with menu-select navigation and matching
+# colors, out of the box. Every entry below is **scoped** to the
+# `(zz|zz-drop)` command context, so TAB behaviour for any other
+# command (git, ls, kubectl, …) is left untouched. Each setting
+# is guarded so an explicit override in the operator's .zshrc
+# always wins; opt-out entirely with `export _ZZ_NO_AUTO_STYLE=1`
+# before invoking zz. Re-runs are no-ops via the
+# `_ZZ_AUTO_STYLED` sentinel.
+if [[ -z $_ZZ_AUTO_STYLED && -z $_ZZ_NO_AUTO_STYLE ]]; then
+    typeset -g _ZZ_AUTO_STYLED=1
+
+    zmodload -i zsh/complist 2>/dev/null
+
+    # Register the menu-select widget only if it doesn't exist —
+    # preserves any user-defined widget by the same name (rare).
+    (( $+widgets[menu-select] )) || \
+        zle -C menu-select .menu-select _main_complete 2>/dev/null
+
+    # Guards: `zstyle -m CONCRETE STYLE '*'` returns true iff any
+    # stored rule applies to the concrete context with a
+    # non-empty value. We probe with a representative concrete
+    # context (`:completion::complete:zz:0[:descriptions]`) so
+    # zstyle's pattern-matching machinery does the right thing —
+    # querying with a pattern like `:completion:*:...` would be
+    # treated as a literal string and never match.
+    #
+    # Effect: any user rule that already applies to zz completion
+    # — whether scoped to (zz|zz-drop) or set globally on
+    # `:completion:*` — wins; we only fill in defaults that the
+    # operator has not already expressed an opinion about.
+    zstyle -m ':completion::complete:zz:0' menu '*' \
+        || zstyle ':completion:*:*:(zz|zz-drop):*' menu select=1
+    zstyle -m ':completion::complete:zz:0' group-name '*' \
+        || zstyle ':completion:*:*:(zz|zz-drop):*' group-name ''
+    zstyle -m ':completion::complete:zz:0:descriptions' format '*' \
+        || zstyle ':completion:*:*:(zz|zz-drop):*:descriptions' \
+            format '%F{cyan}[%d]%f'
+    zstyle -m ':completion::complete:zz:0' verbose '*' \
+        || zstyle ':completion:*:*:(zz|zz-drop):*' verbose yes
+    zstyle -m ':completion::complete:zz:0' sort '*' \
+        || zstyle ':completion:*:*:(zz|zz-drop):*' sort false
+    zstyle -m ':completion::complete:zz:0' list-colors '*' \
+        || zstyle ':completion:*:*:(zz|zz-drop):*' \
+            list-colors "${(s.:.)LS_COLORS}" 'ma=01;36'
+    zstyle -m ':completion::complete:zz:0' tag-order '*' \
+        || zstyle ':completion:*:*:(zz|zz-drop):*' tag-order \
+            'remote-files remote-dirs local-files local-dirs verbs atomics help'
+fi
+
 _zz_complete() {
     # Don't leak the operator's debug state through TAB. If
     # xtrace/verbose are on in the surrounding shell (`set -x`,

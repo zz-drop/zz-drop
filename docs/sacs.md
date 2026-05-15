@@ -26,60 +26,64 @@ zz --completions fish > ~/.config/fish/completions/zz.fish      # fish
 Each script registers completion for both `zz` and `zz-drop` so it
 works the same regardless of which name the operator invokes.
 
-## zsh styling (opt-in)
+## zsh styling (built-in, override-friendly)
 
-Out of the box, the zsh completer renders a flat list — same as
-the other two shells. zsh's `zstyle` machinery is **context-aware**:
-patterns like `:completion:*:*:(zz|zz-drop):*` match only when the
-user is completing `zz` or `zz-drop`, never any other command. So
-a richer presentation is achievable scoped strictly to `zz`,
-without touching the TAB experience of `git`, `ls`, `cd`,
-`kubectl`, or anything else.
+The SACS zsh script auto-applies a styling block on first
+invocation: headed groups, menu-select on first ambiguous match,
+filename colors, cyan section headers, SACS rank order. Every
+zstyle is **scoped** to the `(zz|zz-drop)` command context, so
+TAB behaviour for any other command (git, ls, kubectl, …) is
+left untouched.
+
+Each setting is wrapped in a `zstyle -m … || zstyle …` guard,
+which means an explicit override in your `~/.zshrc` always wins
+— no need to touch the script.
+
+### Override examples
+
+```zsh
+# Pick a different header color
+zstyle ':completion:*:*:(zz|zz-drop):*:descriptions' format '%F{green}[%d]%f'
+
+# Surface SACS verbs above remote files
+zstyle ':completion:*:*:(zz|zz-drop):*' tag-order \
+    'verbs atomics remote-files remote-dirs local-files local-dirs help'
+
+# Disable menu-select entirely
+zstyle ':completion:*:*:(zz|zz-drop):*' menu no
+```
+
+### Disable the auto-styling
+
+To opt out entirely (e.g., you want pure flat completion or are
+debugging a zstyle conflict), set the env var **before** the
+first invocation:
+
+```zsh
+export _ZZ_NO_AUTO_STYLE=1
+```
+
+The fall-through behaviour is the stock-zsh flat list, identical
+to bash and fish.
+
+### What gets applied (full list)
+
+| Style | Default value | Purpose |
+|---|---|---|
+| `zmodload zsh/complist` | always loaded | Provides `menu-select` widget |
+| `zle -C menu-select .menu-select _main_complete` | registered if not already present | Makes the widget invokable |
+| `menu select=1` | first ambiguous match | Enter menu-select on TAB |
+| `group-name ''` | each tag = own group | Section per `_describe -t <tag>` |
+| `descriptions format` | `%F{cyan}[%d]%f` | Cyan bracketed header |
+| `verbose yes` | descriptions visible | Show `value : description` |
+| `sort false` | preserve SACS order | No alphabetical re-sort |
+| `list-colors` | `$LS_COLORS` + `ma=01;36` | Filename colors + bold cyan selected |
+| `tag-order` | `remote-files remote-dirs local-files local-dirs verbs atomics help` | Section order |
 
 The completer already groups candidates by kind (`verb`,
 `atomic`, `file_remote`, `dir_remote`, `file_local`, `dir_local`,
-`help`) via `_describe -t <tag>`. Adding the six lines below to
-`~/.zshrc` turns those tags into headed sections with menu select
-and filename colors:
-
-```zsh
-# zz-drop completion — every line below is either neutral
-# (file paths, module load, widget registration) or scoped
-# explicitly to the (zz|zz-drop) command context. No global
-# zsh setting is altered, so other commands' TAB experience
-# (git, ls, kubectl, …) is left exactly as you had it.
-fpath=(~/.zfunc $fpath)
-zmodload zsh/complist
-autoload -U compinit && compinit -i
-# On stock macOS zsh, loading zsh/complist does not auto-register
-# the menu-select widget; the explicit `zle -C` ensures the
-# widget exists so the scoped zstyle below can activate it.
-zle -C menu-select .menu-select _main_complete
-
-# All zstyles are scoped to the (zz|zz-drop) command context only.
-zstyle ':completion:*:*:(zz|zz-drop):*' menu select=1
-zstyle ':completion:*:*:(zz|zz-drop):*' group-name ''
-zstyle ':completion:*:*:(zz|zz-drop):*:descriptions' format '%F{cyan}[%d]%f'
-zstyle ':completion:*:*:(zz|zz-drop):*' verbose yes
-zstyle ':completion:*:*:(zz|zz-drop):*' sort false
-zstyle ':completion:*:*:(zz|zz-drop):*' list-colors "${(s.:.)LS_COLORS}" 'ma=01;36'
-zstyle ':completion:*:*:(zz|zz-drop):*' tag-order \
-    'remote-files remote-dirs local-files local-dirs verbs atomics help'
-```
-
-Line by line:
-
-| Line | Effect | Scope |
-|---|---|---|
-| `fpath=(~/.zfunc $fpath)` + `compinit -i` | Make zsh discover the SACS completion file installed under `~/.zfunc/_zz`. | Neutral — `~/.zfunc` only contains zz files. |
-| `zmodload zsh/complist` + `zle -C menu-select` | Load complist and register the `menu-select` widget. On stock macOS zsh the widget is not auto-registered when complist loads, so the explicit `zle -C` is needed for menu-select to activate at all. | Neutral — registers a widget that is invoked only when a zstyle requests menu-select. No key is rebound globally. |
-| `menu select=1` | Tell zsh's completer to enter menu-select on the very first ambiguous match (≥1 candidate). | **Scoped to `(zz|zz-drop)` only**. Other commands keep their default zsh completion behaviour. |
-| `group-name ''` | Render each `_describe -t <tag>` group as a separate section. | Scoped. |
-| `descriptions … format` | Cyan header above each section (`[remote files]`, `[verbs]`, …). | Scoped. |
-| `verbose yes` | Show the description string next to each value. | Scoped. |
-| `sort false` | Preserve SACS's rank order (newest-first for files, fixed verb order); without this zsh re-sorts each group alphabetically. | Scoped. |
-| `list-colors … 'ma=01;36'` | Apply your `$LS_COLORS` (filename colors by extension) and highlight the currently-selected entry in bold cyan. | Scoped. |
-| `tag-order` | Section order: remote results first, then local, then verbs, then atomics. | Scoped. |
+`help`) via `_describe -t <tag>`; the styling above gives those
+tags their visual identity.
 
 ### Per-shell wrapper for `zz d <pattern>` (download glob)
 
