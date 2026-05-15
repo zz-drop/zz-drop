@@ -1,0 +1,41 @@
+name: smoke-installer
+
+# Runs scripts/smoke-installer.sh against the published curl
+# installer inside Alpine 3.19 containers. Asserts:
+#   - bash/zsh/fish completion files land at the right XDG path
+#   - --version works on zz / zz-drop / zz-tui
+#   - ~/.zshrc auto-populate is correct in all four scenarios
+#     (fresh, framework-detected, idempotent re-run, $SHELL unset)
+#
+# Trigger surface kept narrow on purpose: this exercises the
+# already-published release artifact, so it's pointless to re-run
+# on every code push. Runs when the installer-patch workflow or
+# the smoke script itself changes, or on demand.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to smoke-test (default: latest pre-release)"
+        required: false
+        type: string
+  pull_request:
+    paths:
+      - '.github/workflows/patch-installer.yml'
+      - '.github/workflows/smoke-installer.yml'
+      - 'scripts/smoke-installer.sh'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify docker is available
+        run: docker version
+
+      - name: Run smoke-installer.sh
+        run: bash scripts/smoke-installer.sh "${{ inputs.version }}"
