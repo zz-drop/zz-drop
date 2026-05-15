@@ -58,63 +58,72 @@ jobs:
             exit 0
           fi
 
+          # Heredoc body intentionally indented at the same column
+          # as the surrounding `run: |` block (10 spaces). YAML's
+          # literal block scalar requires every line of the script
+          # to share the run-block's indent — un-indented heredoc
+          # contents would be parsed as new YAML keys and the
+          # workflow file would fail to load with a syntax error.
+          # POSIX sh ignores leading whitespace, so the indentation
+          # is purely a YAML concern; the appended block runs
+          # exactly as intended.
           cat >> zz-drop-installer.sh <<'PATCH'
 
-# zz-drop: shell-detect + auto-completion install
-# Appended by patch-installer.yml after cargo-dist generates the
-# script. Detects $SHELL, writes the matching SACS completion
-# file to the canonical XDG path, and prints any extra hint the
-# operator needs (e.g. `fpath+=...` for zsh, framework source
-# for bash). Failures here are non-fatal: install of the
-# binaries already succeeded by the time we get here.
-__zz_install_completions() {
-    _zz_bin="${HOME}/.local/bin/zz-drop"
-    [ -x "$_zz_bin" ] || _zz_bin="${HOME}/.cargo/bin/zz-drop"
-    [ -x "$_zz_bin" ] || {
-        echo "  completion: zz-drop binary not at expected paths; skip"
-        return 0
-    }
+          # zz-drop: shell-detect + auto-completion install
+          # Appended by patch-installer.yml after cargo-dist
+          # generated the script. Detects $SHELL, writes the
+          # matching SACS completion file to the canonical XDG
+          # path, and prints any extra hint the operator needs.
+          # Failures here are non-fatal: install of the binaries
+          # already succeeded by the time we get here.
+          __zz_install_completions() {
+              _zz_bin="${HOME}/.local/bin/zz-drop"
+              [ -x "$_zz_bin" ] || _zz_bin="${HOME}/.cargo/bin/zz-drop"
+              [ -x "$_zz_bin" ] || {
+                  echo "  completion: zz-drop binary not at expected paths; skip"
+                  return 0
+              }
 
-    case "$(basename "${SHELL:-}")" in
-        bash)
-            _zz_dest="${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/zz-drop"
-            mkdir -p "$(dirname "$_zz_dest")" 2>/dev/null
-            "$_zz_bin" --completions bash > "$_zz_dest" 2>/dev/null && {
-                echo "  bash completion → $_zz_dest"
-                echo "  → if not auto-loaded, source the framework:"
-                echo "      Linux: source /usr/share/bash-completion/bash_completion"
-                echo "      macOS (brew): source \$(brew --prefix)/etc/bash_completion"
-            }
-            ;;
-        zsh)
-            _zz_dest="${ZDOTDIR:-$HOME}/.zfunc/_zz"
-            mkdir -p "$(dirname "$_zz_dest")" 2>/dev/null
-            "$_zz_bin" --completions zsh > "$_zz_dest" 2>/dev/null && {
-                echo "  zsh completion → $_zz_dest"
-                echo "  → add to ~/.zshrc (one-time):"
-                echo "      fpath=(\$(dirname \"$_zz_dest\") \$fpath)"
-                echo "      autoload -U compinit && compinit"
-            }
-            ;;
-        fish)
-            _zz_dest="$HOME/.config/fish/completions/zz.fish"
-            mkdir -p "$(dirname "$_zz_dest")" 2>/dev/null
-            "$_zz_bin" --completions fish > "$_zz_dest" 2>/dev/null && {
-                echo "  fish completion → $_zz_dest (auto-loaded)"
-            }
-            ;;
-        "")
-            echo "  completion: \$SHELL not set; skip"
-            ;;
-        *)
-            echo "  completion: shell '$SHELL' not auto-supported"
-            echo "  → manual: $_zz_bin --completions {bash|zsh|fish} > <path>"
-            ;;
-    esac
-    unset _zz_bin _zz_dest
-}
-__zz_install_completions
-PATCH
+              case "$(basename "${SHELL:-}")" in
+                  bash)
+                      _zz_dest="${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/zz-drop"
+                      mkdir -p "$(dirname "$_zz_dest")" 2>/dev/null
+                      "$_zz_bin" --completions bash > "$_zz_dest" 2>/dev/null && {
+                          echo "  bash completion → $_zz_dest"
+                          echo "  → if not auto-loaded, source the framework:"
+                          echo "      Linux: source /usr/share/bash-completion/bash_completion"
+                          echo "      macOS (brew): source \$(brew --prefix)/etc/bash_completion"
+                      }
+                      ;;
+                  zsh)
+                      _zz_dest="${ZDOTDIR:-$HOME}/.zfunc/_zz"
+                      mkdir -p "$(dirname "$_zz_dest")" 2>/dev/null
+                      "$_zz_bin" --completions zsh > "$_zz_dest" 2>/dev/null && {
+                          echo "  zsh completion → $_zz_dest"
+                          echo "  → add to ~/.zshrc (one-time):"
+                          echo "      fpath=(\$(dirname \"$_zz_dest\") \$fpath)"
+                          echo "      autoload -U compinit && compinit"
+                      }
+                      ;;
+                  fish)
+                      _zz_dest="$HOME/.config/fish/completions/zz.fish"
+                      mkdir -p "$(dirname "$_zz_dest")" 2>/dev/null
+                      "$_zz_bin" --completions fish > "$_zz_dest" 2>/dev/null && {
+                          echo "  fish completion → $_zz_dest (auto-loaded)"
+                      }
+                      ;;
+                  "")
+                      echo "  completion: \$SHELL not set; skip"
+                      ;;
+                  *)
+                      echo "  completion: shell '$SHELL' not auto-supported"
+                      echo "  → manual: $_zz_bin --completions {bash|zsh|fish} > <path>"
+                      ;;
+              esac
+              unset _zz_bin _zz_dest
+          }
+          __zz_install_completions
+          PATCH
 
           echo "=== sha256 after patch ==="
           sha256sum zz-drop-installer.sh
