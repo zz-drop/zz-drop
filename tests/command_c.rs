@@ -8,15 +8,19 @@ use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
+use std::process::Command;
+use std::time::Duration;
 
 use zz_drop::commands::open_tui::{EXIT_TUI_NOT_FOUND, run_with_env};
 
 fn write_executable(path: &Path, body: &str) {
-    // Use OpenOptions + sync_all so Linux's exec() doesn't race
-    // with a still-pending write and return ETXTBSY ("Text file
-    // busy"). On macOS the plain `fs::write` already closes the
-    // fd synchronously enough; on the GitHub-hosted Linux runner
-    // the test was flaking without this fsync.
+    // Linux can return ETXTBSY ("Text file busy") on exec() of a
+    // file that was just written, even after the writable fd is
+    // closed — the kernel's i_writecount tracking can lag for a
+    // few ms on the GitHub-hosted runner. sync_all + drop is not
+    // enough; we additionally warm up the exec path below until
+    // the kernel accepts it, so the caller has a contractual
+    // guarantee that a subsequent spawn won't flake.
     use std::io::Write;
     let mut f = fs::OpenOptions::new()
         .create(true)
@@ -30,6 +34,20 @@ fn write_executable(path: &Path, body: &str) {
     let mut perms = fs::metadata(path).unwrap().permissions();
     perms.set_mode(0o755);
     fs::set_permissions(path, perms).expect("chmod +x");
+
+    // libc ETXTBSY = 26. Retry the spawn for ~200ms; the script
+    // body runs each time (harmless: it's `exit 0` / `exit 42`
+    // that the test will then re-run and observe).
+    for _ in 0..20 {
+        match Command::new(path).status() {
+            Ok(_) => return,
+            Err(e) if e.raw_os_error() == Some(26) => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(e) => panic!("warmup spawn of {path:?} failed: {e}"),
+        }
+    }
+    panic!("ETXTBSY persisted on {path:?} after 200ms");
 }
 
 #[test]
