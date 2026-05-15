@@ -76,6 +76,56 @@ jobs:
           # path, and prints any extra hint the operator needs.
           # Failures here are non-fatal: install of the binaries
           # already succeeded by the time we get here.
+          # For zsh only: ensure ~/.zshrc has the fpath line (and a
+          # compinit call when no recognized framework is present).
+          # Idempotent + framework-aware:
+          #   - if our marker is already in the file, skip entirely
+          #   - if a known framework is referenced (oh-my-zsh,
+          #     prezto, zinit, antibody, antidote, znap, zimfw,
+          #     zplug), only append the fpath line (the framework
+          #     owns compinit)
+          #   - otherwise append fpath + compinit
+          # File is only created when missing; existing content is
+          # never reordered or rewritten.
+          __zz_zshrc_setup() {
+              _zz_zshrc="${ZDOTDIR:-$HOME}/.zshrc"
+              _zz_marker="# zz-drop SACS — auto-installed by zz-drop installer"
+
+              if [ -f "$_zz_zshrc" ] && grep -qF "$_zz_marker" "$_zz_zshrc"; then
+                  echo "  zsh: $_zz_zshrc already wired (marker present); skip"
+                  unset _zz_zshrc _zz_marker
+                  return 0
+              fi
+
+              _zz_fw=""
+              if [ -f "$_zz_zshrc" ]; then
+                  for _zz_f in oh-my-zsh ohmyzsh prezto zinit antibody antidote znap zimfw zplug; do
+                      if grep -qF "$_zz_f" "$_zz_zshrc"; then
+                          _zz_fw="$_zz_f"
+                          break
+                      fi
+                  done
+              fi
+
+              [ -f "$_zz_zshrc" ] && [ -s "$_zz_zshrc" ] && printf "\n" >> "$_zz_zshrc"
+              if [ -n "$_zz_fw" ]; then
+                  {
+                      printf "%s (framework detected: %s)\n" "$_zz_marker" "$_zz_fw"
+                      printf "fpath=(\$HOME/.zfunc \$fpath)\n"
+                  } >> "$_zz_zshrc"
+                  echo "  zsh: appended fpath to $_zz_zshrc (framework: $_zz_fw owns compinit)"
+              else
+                  {
+                      printf "%s\n" "$_zz_marker"
+                      printf ". \"\$HOME/.local/bin/env\" 2>/dev/null || true\n"
+                      printf "fpath=(\$HOME/.zfunc \$fpath)\n"
+                      printf "autoload -U compinit && compinit -i\n"
+                  } >> "$_zz_zshrc"
+                  echo "  zsh: wrote fpath + compinit + PATH-source to $_zz_zshrc"
+              fi
+              unset _zz_zshrc _zz_marker _zz_fw _zz_f
+          }
+
           __zz_install_completions() {
               _zz_bin="${HOME}/.local/bin/zz-drop"
               [ -x "$_zz_bin" ] || _zz_bin="${HOME}/.cargo/bin/zz-drop"
@@ -100,9 +150,7 @@ jobs:
                       mkdir -p "$(dirname "$_zz_dest")" 2>/dev/null
                       "$_zz_bin" --completions zsh > "$_zz_dest" 2>/dev/null && {
                           echo "  zsh completion → $_zz_dest"
-                          echo "  → add to ~/.zshrc (one-time):"
-                          echo "      fpath=(\$(dirname \"$_zz_dest\") \$fpath)"
-                          echo "      autoload -U compinit && compinit"
+                          __zz_zshrc_setup
                       }
                       ;;
                   fish)
