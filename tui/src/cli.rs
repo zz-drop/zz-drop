@@ -32,6 +32,13 @@ use crate::wizard::{GoogleDriveSetupStage, LoginFlowStage, OneDriveSetupStage};
 const LOGIN_FLOW_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 pub fn entry_point() -> ExitCode {
+    // `--version` / `-V` short-circuits before the TTY check so it
+    // works in scripts and headless containers (CI, Alpine smoke).
+    if std::env::args().skip(1).any(|a| a == "--version" || a == "-V") {
+        println!("zz-tui {}", env!("CARGO_PKG_VERSION"));
+        return ExitCode::from(0);
+    }
+
     if !io::stdout().is_terminal() {
         eprintln!("zz-tui requires an interactive terminal");
         return ExitCode::from(2);
