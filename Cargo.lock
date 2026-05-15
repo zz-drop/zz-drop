@@ -4283,7 +4283,7 @@ dependencies = [
 
 [[package]]
 name = "zz-drop"
-version = "0.0.1-pre.5"
+version = "0.0.1-pre.6"
 dependencies = [
  "nix 0.31.3",
  "owo-colors",
@@ -4300,7 +4300,7 @@ dependencies = [
 
 [[package]]
 name = "zz-drop-core"
-version = "0.0.1-pre.5"
+version = "0.0.1-pre.6"
 dependencies = [
  "argon2",
  "base64",
@@ -4325,7 +4325,7 @@ dependencies = [
 
 [[package]]
 name = "zz-drop-tui"
-version = "0.0.1-pre.5"
+version = "0.0.1-pre.6"
 dependencies = [
  "arboard",
  "directories",
