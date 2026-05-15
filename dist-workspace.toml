@@ -41,6 +41,13 @@ targets = [
     "x86_64-unknown-linux-gnu",
     "x86_64-unknown-linux-musl",
 ]
+# Binary aliases — extra names installers create for each binary.
+# cargo-dist handles this uniformly: the curl shell installer
+# drops a symlink in CARGO_HOME/bin, the brew formula populates
+# `BINARY_ALIASES` and calls `install_binary_aliases!` to create
+# the same symlink in the cellar. Replaces the standalone
+# `bin.install_symlink` previously injected by patch-formula.yml.
+bin-aliases = { "zz-drop" = ["zz"] }
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
 # Where to host releases

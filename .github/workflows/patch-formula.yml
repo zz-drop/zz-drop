@@ -4,20 +4,20 @@ name: Patch brew formula
 # `post-announce-jobs` in dist-workspace.toml). cargo-dist's
 # homebrew-publish job has already committed the auto-generated
 # `Formula/zz-drop.rb` into the tap by the time announce fires;
-# this job patches it so `brew install` also wires SACS shell
-# completions and a `zz` shorthand. Both are inserted into
+# this job patches it to wire SACS shell completions inside
 # `def install` so they live in the cellar and `brew uninstall`
 # reverses them automatically.
 #
-# Why not a custom `def post_install` for the symlink? brew's
-# Formula API has no symmetric `uninstall_postflight` hook (it's
-# a Ruby method definition that brew silently accepts and never
-# calls), so a symlink created outside the cellar survives as a
-# broken link after `brew uninstall`. `bin.install_symlink` puts
-# it inside the cellar where brew tracks it.
+# The `zz` shorthand symlink is NOT injected here — it is
+# declared in `dist-workspace.toml` as `bin-aliases = { "zz-drop"
+# = ["zz"] }`. cargo-dist propagates it to both the curl shell
+# installer (drops a symlink in CARGO_HOME/bin) and the brew
+# formula (populates `BINARY_ALIASES` and runs
+# `install_binary_aliases!` inside `def install`). Cellar-tracked,
+# brew-uninstall-clean.
 #
-# Idempotent: each insertion is gated on its own marker so
-# re-runs are no-ops.
+# Idempotent: completions insertion is gated on its own marker
+# so re-runs are no-ops.
 
 on:
   workflow_call:
@@ -46,7 +46,7 @@ jobs:
           git config --global user.email "release-bot@users.noreply.github.com"
           git clone "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" tap
 
-      - name: Patch formula (completions + zz symlink, both cellar-tracked)
+      - name: Patch formula (SACS completions only)
         working-directory: tap
         run: |
           set -euo pipefail
@@ -64,50 +64,27 @@ jobs:
           # by OS / arch. FATAL if missing — we refuse to ship a
           # half-patched formula.
           #
-          # Two lines inserted after the anchor:
-          # 1. `generate_completions_from_executable` — brew DSL
-          #    that runs the binary three times to capture bash,
-          #    zsh, fish completion scripts and drops them into
-          #    `share/{bash-completion/completions,zsh/site-functions,
-          #    fish/vendor_completions.d}`. Cellar-tracked.
-          # 2. `bin.install_symlink bin/"zz-drop" => "zz"` — the
-          #    `zz` shorthand, also inside the cellar so brew
-          #    unlinks it on uninstall. If the user already has a
-          #    `zz` in their PATH, brew fails at link time with a
-          #    standard "Target ... already exists" message and
-          #    the user can `brew link --overwrite` or remove
-          #    their conflict.
+          # `generate_completions_from_executable` runs the binary
+          # three times during install to capture bash / zsh / fish
+          # completion scripts and drops them into
+          # `share/{bash-completion/completions,zsh/site-functions,
+          # fish/vendor_completions.d}`. Cellar-tracked.
           #
-          # Single-line `generate_completions_from_executable`
-          # form keeps rubocop's Layout/ArgumentAlignment quiet
-          # (multi-line variant must align args under the first
-          # arg column); 105 chars including indent, under brew's
-          # 118-char line limit.
+          # Single-line form keeps rubocop's Layout/ArgumentAlignment
+          # quiet (multi-line variant must align args under the
+          # first arg column); 105 chars including indent, under
+          # brew's 118-char line limit.
           anchor = "    install_binary_aliases!\n"
           insertion = (
               "\n"
               "    generate_completions_from_executable("
               "bin/\"zz-drop\", \"--completions\", "
               "shells: [:bash, :zsh, :fish])\n"
-              "    bin.install_symlink bin/\"zz-drop\" => \"zz\"\n"
           )
 
-          # Per-line idempotency: skip if both already present
-          # (re-run on already-patched formula); FATAL if only
-          # one is present (partial state needs human attention).
-          have_completions = "generate_completions_from_executable" in src
-          have_symlink = 'bin.install_symlink bin/"zz-drop" => "zz"' in src
-
-          if have_completions and have_symlink:
-              print("nothing to do (both already wired)")
+          if "generate_completions_from_executable" in src:
+              print("nothing to do (completions already wired)")
               sys.exit(0)
-
-          if have_completions or have_symlink:
-              sys.exit(
-                  "FATAL: partial patch state — completions wired "
-                  "without `zz` symlink, or vice versa. Manual "
-                  "cleanup of the formula required."
-              )
 
           if anchor not in src:
               sys.exit(
@@ -117,7 +94,7 @@ jobs:
 
           src = src.replace(anchor, anchor + insertion, 1)
           p.write_text(src)
-          print("patched: completions + bin.install_symlink zz")
+          print("patched: SACS completions wired")
           PY
 
       - name: Commit and push
@@ -129,5 +106,5 @@ jobs:
             exit 0
           fi
           git add "${FORMULA}"
-          git commit -m "Wire completions + bin.install_symlink zz"
+          git commit -m "Wire SACS completions"
           git push
