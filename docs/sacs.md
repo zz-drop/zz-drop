@@ -9,13 +9,28 @@ suggestions, the script never changes.
 
 ## Installation
 
-If you installed via the Homebrew tap (`brew install
-zz-drop/zz-drop/zz-drop`), completions for bash, zsh and fish are
-already wired into `share/{bash-completion,zsh/site-functions,fish/vendor_completions.d}`
-and `brew uninstall` removes them. Skip to *zsh styling* below.
+Both supported install paths wire completions automatically — no
+manual `--completions` step required.
 
-For other install paths (`cargo install`, the curl installer, build
-from source), wire completions manually:
+- **Homebrew** (`brew install zz-drop/zz-drop/zz-drop`) — installs
+  completions for bash / zsh / fish into the standard cellar
+  paths (`share/{bash-completion/completions,zsh/site-functions,
+  fish/vendor_completions.d}`). `brew uninstall` reverses them.
+- **`curl | sh` installer** — detects `$SHELL`, writes the
+  matching completion file to the canonical XDG path, and prints
+  any extra one-time setup the operator needs (e.g. `fpath+=…`
+  for zsh). Falls through gracefully when `$SHELL` is unset
+  (containers, scripts) or set to a shell SACS doesn't speak.
+
+The auto-installed paths per shell:
+
+| Shell | Path |
+|---|---|
+| bash | `${XDG_DATA_HOME:-~/.local/share}/bash-completion/completions/zz-drop` |
+| zsh  | `${ZDOTDIR:-~}/.zfunc/_zz` |
+| fish | `~/.config/fish/completions/zz.fish` |
+
+For build-from-source or any other path, manual install:
 
 ```sh
 zz --completions bash | source                                  # bash

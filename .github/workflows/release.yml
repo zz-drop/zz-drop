@@ -342,6 +342,15 @@ jobs:
           persist-credentials: false
           submodules: recursive
 
+  custom-patch-installer:
+    needs:
+      - plan
+      - announce
+    uses: ./.github/workflows/patch-installer.yml
+    with:
+      plan: ${{ needs.plan.outputs.val }}
+    secrets: inherit
+
   custom-sign-release:
     needs:
       - plan

@@ -20,11 +20,15 @@ publish-jobs = ["homebrew"]
 publish-prereleases = true
 # Custom jobs spliced into release.yml after announce. Each entry
 # points to a reusable workflow (`workflow_call`) inside this
-# repo:
-#   sign-release   — minisign-sign every release artifact
-#   patch-formula  — append a conditional `zz` symlink to the
-#                    auto-generated brew formula in the tap.
-post-announce-jobs = ["./sign-release", "./patch-formula"]
+# repo. ORDER MATTERS:
+#   patch-installer — appends shell-detection + auto-completion
+#                     install logic to zz-drop-installer.sh in the
+#                     GH release; runs FIRST so sign-release sees
+#                     and signs the patched script.
+#   sign-release    — minisign-signs every release artifact.
+#   patch-formula   — wires SACS completions into the
+#                     cargo-dist-generated brew formula.
+post-announce-jobs = ["./patch-installer", "./sign-release", "./patch-formula"]
 # Target platforms to build apps for (Rust target-triple syntax).
 # Unix-only: the local agent uses Unix domain sockets and rustix
 # Unix-specific syscalls — Windows is out of scope for v1.
@@ -43,13 +47,18 @@ targets = [
 ]
 # Binary aliases — extra names installers create for each binary.
 # cargo-dist handles this uniformly: the curl shell installer
-# drops a symlink in CARGO_HOME/bin, the brew formula populates
+# drops a symlink in install-path, the brew formula populates
 # `BINARY_ALIASES` and calls `install_binary_aliases!` to create
 # the same symlink in the cellar. Replaces the standalone
 # `bin.install_symlink` previously injected by patch-formula.yml.
 bin-aliases = { "zz-drop" = ["zz"] }
-# Path that installers should place binaries in
-install-path = "CARGO_HOME"
+# Path that installers should place binaries in. Standard XDG
+# user-bin location. Already in PATH on most modern Linux distros
+# via the ~/.profile snippet (`if [ -d ~/.local/bin ]; then PATH=
+# ~/.local/bin:$PATH`). On macOS / Alpine / WSL fresh installs
+# the cargo-dist installer adds it to ~/.profile / ~/.zshenv
+# automatically (modify_path: true in installer manifest).
+install-path = "~/.local/bin"
 # Where to host releases
 hosting = "github"
 # Whether to install an updater program
