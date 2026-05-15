@@ -1,14 +1,13 @@
 //! State-aware contextual suggestions (SACS).
 //!
-//! Three pieces of public surface live under tooling subcommands
+//! Four pieces of public surface live under tooling subcommands
 //! intercepted by `main.rs` before the grammar parser runs:
 //!
 //! - `zz --help` / `zz -h` — static cheat sheet rendered by [`help`].
-//! - `zz --completions <shell>` — emits a shell completion script
-//!   (chunk B; today returns a stub).
+//! - `zz --version` / `zz -V` — print `zz-drop <version>` and exit.
+//! - `zz --completions <shell>` — emits a shell completion script.
 //! - `zz __complete <args>` — hidden subcommand the shell scripts
-//!   call on every TAB to fetch contextual candidates as NDJSON
-//!   (chunk C+E; today returns a stub).
+//!   call on every TAB to fetch contextual candidates as NDJSON.
 //!
 //! Keeping these out of the [`crate::cli::Command`] grammar
 //! preserves the parser's "treat unknown as path" invariant: a
@@ -49,6 +48,10 @@ pub fn intercept(args: &[String]) -> Intercepted {
     match head {
         "--help" | "-h" => {
             print!("{}", help::render(help::detect_columns()));
+            Intercepted::Handled(EXIT_OK)
+        }
+        "--version" | "-V" => {
+            println!("zz-drop {}", env!("CARGO_PKG_VERSION"));
             Intercepted::Handled(EXIT_OK)
         }
         "--completions" => Intercepted::Handled(handle_completions(&args[1..])),
@@ -178,6 +181,18 @@ mod tests {
             other => panic!("expected Handled(0), got {:?}", as_i32(other)),
         }
         match run(&["-h"]) {
+            Intercepted::Handled(EXIT_OK) => {}
+            other => panic!("expected Handled(0), got {:?}", as_i32(other)),
+        }
+    }
+
+    #[test]
+    fn version_is_intercepted() {
+        match run(&["--version"]) {
+            Intercepted::Handled(EXIT_OK) => {}
+            other => panic!("expected Handled(0), got {:?}", as_i32(other)),
+        }
+        match run(&["-V"]) {
             Intercepted::Handled(EXIT_OK) => {}
             other => panic!("expected Handled(0), got {:?}", as_i32(other)),
         }
