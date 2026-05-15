@@ -56,7 +56,7 @@ Contains:
 - profile unlock flow + alias / container resolution
 - local wipe
 - operational provider clients (Nextcloud WebDAV, Google Drive,
-  OneDrive, Dropbox; Proton Drive deferred to v1.1+)
+  OneDrive, Dropbox)
 - SACS state-aware completion / suggestions
 - minimal launcher for the `zz-tui` binary via `zz c`
 
@@ -110,8 +110,6 @@ Contains:
 - provider configuration
 - Nextcloud Login Flow UI
 - profile passphrase screen
-- profile push/recover screens
-- account/alias management UI
 - diagnostics UI
 
 Must NOT contain:
@@ -134,9 +132,7 @@ Every change must consider:
   scriptability)
 - TUI behavior
 - local agent protocol
-- profile-blob compatibility (both `profile-local.zz` and
-  `profile-remote.zz` slots)
-- server API compatibility
+- profile-blob compatibility (`profile-local.zz`)
 - security/privacy/logging
 - README/docs
 - tests
@@ -167,14 +163,10 @@ Never log:
 - OAuth tokens
 - profile decrypt passphrases
 - decrypted profile data
-- plaintext profile payload (decoded `profile-local.zz` /
-  `profile-remote.zz` content)
+- plaintext profile payload (decoded `profile-local.zz` content)
 - Authorization headers
 - session tokens
 - persistent IP/user-agent logs associated with profiles
-
-The server must never see decrypted profile data or provider
-metadata.
 
 The local agent must:
 

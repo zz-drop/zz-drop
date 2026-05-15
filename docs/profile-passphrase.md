@@ -9,7 +9,7 @@ properties.
 
 - It encrypts the local `profile.zz` envelope (Argon2id KDF →
   XChaCha20-Poly1305 AEAD, see `profile-format.md`).
-- It is **never** sent to `zz-drop.net`.
+- It **never leaves the local machine**.
 - It is **not** the Nextcloud login password.
 - It is **not** the Nextcloud "app password" (the wizard collected
   that in the auth screen; that secret lives encrypted *inside*

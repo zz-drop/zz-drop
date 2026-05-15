@@ -12,7 +12,7 @@ the spec.
 | (none) | 1+ paths | Upload (default — first non-reserved token wins) |
 | `s` | 1+ paths | Upload (explicit alias of the default) |
 | `d` | 1+ remote names | Download |
-| `z` | none / `local` / `remote` | Unlock the active container into the agent |
+| `z` | — | Unlock the local container into the agent |
 | `q` | — | Lock (zeroize the in-RAM container) |
 | `w` | — | Wipe local zz-drop state (with typed `y` confirmation) |
 | `c` | — | Launch the configuration TUI (`zz-tui` on `$PATH`) |
@@ -41,7 +41,7 @@ modifiers in any order. Set semantics: `sar` ≡ `sra`, `sarx` ≡
 | `a` | bulk: needs `<dir>` | bulk: needs `<dest>` | implemented |
 | `r` | recurse (with `a` only) | recurse (with `a` only) | implemented |
 | `x` | zstd-compress; bundle as `.tar.zst` when paired with `a` | decompress (and extract `.tar.zst` into a sibling dir) | implemented for single-file (`sx` / `dx`) and bundle upload (`sax` / `sarx`); bulk decompress (`dax` / `darx`) returns `EXIT_NOT_IMPLEMENTED` |
-| `e` | encrypt with file-content E2EE | (no `e` on `d` — download is always magic-detected) | rejected with explicit "coming in v1.1" message |
+| `e` | reserved (future encryption modifier) | (no `e` on `d` — download is always magic-detected) | rejected with explicit "not implemented in v1" message |
 
 `r` without `a` is rejected (`zz sr` / `zz drx` → `unknown
 modifier r`). Duplicate letters are rejected (`zz saa` →
@@ -66,8 +66,8 @@ remote bytes
   → write
 ```
 
-Compression always precedes encryption (when `e` graduates in
-v1.1) — encrypted bytes are high-entropy and won't compress
+If the `e` modifier ever lands, compression will run before
+encryption — encrypted bytes are high-entropy and won't compress
 further.
 
 ## Parser rule

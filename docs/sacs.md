@@ -9,6 +9,14 @@ suggestions, the script never changes.
 
 ## Installation
 
+If you installed via the Homebrew tap (`brew install
+zz-drop/zz-drop/zz-drop`), completions for bash, zsh and fish are
+already wired into `share/{bash-completion,zsh/site-functions,fish/vendor_completions.d}`
+and `brew uninstall` removes them. Skip to *zsh styling* below.
+
+For other install paths (`cargo install`, the curl installer, build
+from source), wire completions manually:
+
 ```sh
 zz --completions bash | source                                  # bash
 zz --completions zsh  > ~/.zfunc/_zz                            # zsh (then `autoload -U compinit && compinit`)
@@ -258,12 +266,9 @@ upload exactly like a file named `q` would (`zz ./q`).
 
 ## States and ranking
 
-The detector reads four signals on every TAB:
+The detector reads three signals on every TAB:
 
 - `profiles-local.zz` exists on disk?
-- `profiles-remote.zz` exists on disk? (only meaningful in builds
-  with the `remote` Cargo feature; default v1 builds treat the file
-  as dead weight)
 - agent socket present?
 - agent unlocked? (resolved with one cheap `Status` round-trip when
   the socket is present; skipped otherwise)
@@ -447,14 +452,10 @@ Snapshots used in tests use only a fixed sanitised identifier set:
 and a small filename pool (`readme.md`, `notes.txt`, `draft.md`,
 `changelog.md`, `benchmark.log`, `file1.md`, `file2.md`,
 `snapshot.tar.zst`). The
-`tests::no_secret_or_remote_host_*` lock tests refuse the official
-hosted-service hostname, real-looking emails, or token-shaped
-strings in any emitted candidate. Nothing in the binary refers to
-the official `zz-drop.net` host outside of the `remote` Cargo
-feature.
+`tests::no_secret_or_remote_host_*` lock tests refuse real-looking
+emails or token-shaped strings in any emitted candidate.
 
 The remote names returned by `LIST_REMOTE` flow through the
 dropdown the same way they flow through `zz d <name>` today — they
 are not encrypted in v1 (consistent with the rest of the
-filename surface). If filename E2EE arrives in a future milestone,
-SACS will inherit it without protocol changes.
+filename surface).

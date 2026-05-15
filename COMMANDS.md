@@ -23,7 +23,7 @@ zz dx <file>.zst [<local-dir>/]    download + decompress (or extract bundle)
 zz da [<local-dest> [<remote/>]]   download all top-level files
 zz dar [<local-dest> [<remote/>]]  download all files recursively
 
-zz z [local|remote] unlock the active container into the agent
+zz z                unlock the local container into the agent
 zz q                lock the agent
 zz w                wipe local zz-drop state (with confirmation)
 zz c                launch the configuration TUI (zz-tui)
@@ -70,7 +70,7 @@ zz f                doctor / diagnostics
 | `zz dar` | — | Recursive variant: mirror the entire remote tree into cwd. |
 | `zz dar <local-dest>` | 1 directory | Mirror the entire remote tree into `<local-dest>`. |
 | `zz dar <local-dest> <remote-prefix>` | 2 args | Mirror only the remote sub-prefix tree into `<local-dest>`. `zz dar ./snapshot project/build/` → only `project/build/...` mirrored under `./snapshot`. |
-| `zz dax` / `zz darx` | — | Bulk download with per-file decompression. **Coming in v1.1.** Today returns `EXIT_NOT_IMPLEMENTED` with a hint to use `dx <bundle>.tar.zst` for the symmetric form. |
+| `zz dax` / `zz darx` | — | Bulk download with per-file decompression. Not implemented yet — today returns `EXIT_NOT_IMPLEMENTED` with a hint to use `dx <bundle>.tar.zst` for the symmetric form. |
 
 **Convention recap:**
 - For `d`/`dx` (multi-file): same trailing-`/` rule as `s` — the last argument with a trailing `/` is the **local destination directory**.
@@ -92,11 +92,9 @@ The `.tar.zst` blob stays on disk; the extracted tree sits next to it under `myd
 
 | Form | Args | Meaning |
 |---|---|---|
-| `zz z` | — | Auto-resolve: pick `profiles-local.zz` (or `profiles-remote.zz` when the `remote` feature is on and the remote container is present), prompt for the passphrase, and unlock the agent. If the container holds more than one inner profile, a numbered picker appears. |
-| `zz z local` | — | Force the local container regardless of what `profiles-remote.zz` says. |
-| `zz z remote` | — | Force the remote container. **Gated** behind the `remote` Cargo feature. v1 default builds reply `EXIT_NOT_IMPLEMENTED`. |
+| `zz z` | — | Open `profiles-local.zz`, prompt for the passphrase and unlock the agent. If the container holds more than one inner profile, a numbered picker appears. |
 | `zz q` | — | Lock the agent: zeroize the KEK and the in-RAM container, drop active alias. |
-| `zz w` | — | Wipe local zz-drop state. Asks for typed `y` confirmation, then removes both `profiles-{local,remote}.zz`, the `last-default-{local,remote}` sidecars, the agent socket + token, and the runtime directory. |
+| `zz w` | — | Wipe local zz-drop state. Asks for typed `y` confirmation, then removes `profiles-local.zz`, the `last-default-local` sidecar, the agent socket + token, and the runtime directory. |
 
 ### Other
 
@@ -114,7 +112,7 @@ The composite verbs `s` and `d` accept a set of single-letter modifiers in any o
 | `a` | Bulk: operate on the entire `<dir>` rather than a specific file. Requires the `<dir>` argument. |
 | `r` | Recurse. Only meaningful when paired with `a` — `sr`/`dr` alone are rejected. |
 | `x` | Compress on upload (zstd, level 3). Decompress on download. Bundles for `sa+x` / `sar+x`. |
-| `e` | Encrypt with file-content E2EE. **Coming in v1.1.** Today rejected explicitly with the message *"encryption (`e`) is coming in v1.1"* so the operator sees something useful instead of a generic parse error. |
+| `e` | Reserved for a future encryption modifier; not implemented in v1. Today rejected explicitly with the message *"encryption (`e`) is not implemented in v1"* so the operator sees something useful instead of a generic parse error. |
 
 Set semantics — equivalent forms produce the same command:
 
@@ -132,7 +130,7 @@ file(s)  →  [tar bundle if a/r ∧ x]
          →  upload as <name>(.zst|.tar.zst)
 ```
 
-Compression always precedes encryption on the v1.1 axis — encrypted bytes are high-entropy and won't compress further.
+If the `e` modifier ever lands, compression will run before encryption — encrypted bytes are high-entropy and won't compress further.
 
 ## Errors
 
@@ -146,7 +144,7 @@ Compression always precedes encryption on the v1.1 axis — encrypted bytes are 
 | `zz sa . backup/ extra` | `sa takes no arguments` (3rd positional rejected — `sa` accepts at most local-dir + remote-prefix) |
 | `zz s docs/` | `s requires at least one argument` (a trailing-`/` arg alone is a destination, no source) |
 | `zz saa .` | `saa: modifier a repeated (set semantics — at most once)` |
-| `zz sex file.md` | `sex: encryption (e) is coming in v1.1; v1 supports a, r, x` |
+| `zz sex file.md` | `sex: encryption (e) is not implemented in v1; v1 supports a, r, x` |
 | `zz sr` / `zz dr x` | `sr: unknown modifier r` (`r` requires `a`) |
 | `zz z foo` | `z takes no arguments` |
 
@@ -158,7 +156,7 @@ Anything that doesn't match a reserved verb is treated as an upload path, so `zz
 |---|---|
 | `0` | Success |
 | `2` | Usage error (missing args, malformed command) |
-| `3` | Recognized but not implemented yet (e.g. `zz dax .`, or `zz z remote` in a default v1 build) |
+| `3` | Recognized but not implemented yet (e.g. `zz dax .`) |
 | `5` | Agent unreachable (socket missing, refused, handshake failed) |
 | `6` | Profile not found |
 | `7` | Decryption failed (wrong passphrase or corrupt container) |
@@ -258,12 +256,10 @@ of zz-drop:
 | present | locked | same as above |
 | present | unlocked | local files first, then verbs |
 
-Local builds with the `remote` Cargo feature OFF still get the
-completion — they just never offer remote-side candidates. See
-[`docs/sacs.md`](docs/sacs.md) for the architecture, the full
-ranking table, and the latency caveats. The `--help` page (a
-static fallback that does not need the completion installed) is
-also produced by the binary:
+See [`docs/sacs.md`](docs/sacs.md) for the architecture, the
+full ranking table, and the latency caveats. The `--help` page
+(a static fallback that does not need the completion installed)
+is also produced by the binary:
 
 ```sh
 zz --help          # static cheat sheet (or zz -h)
@@ -277,5 +273,3 @@ zz --help          # static cheat sheet (or zz -h)
 - [`docs/agent.md`](docs/agent.md) — local agent: lifecycle, socket auth.
 - [`docs/sacs.md`](docs/sacs.md) — shell completion: states, ranking, NDJSON schema.
 - [`docs/commands.md`](docs/commands.md) — short canonical pointer for the spec table.
-- [`docs/file-encryption.md`](docs/file-encryption.md) — `.zzd` blob format (v1.1 file E2EE).
-- [`docs/feature-flags.md`](docs/feature-flags.md) — Cargo feature lifecycle (`remote`).

@@ -10,9 +10,9 @@ Every screen below is rendered with the same chrome:
 
 - a **title bar** showing `▍ zz-tui  ›  <breadcrumb>` on the left
   and the agent-status pill on the right
-- an **8-step stepper band** (`welcome / provider / server / auth /
-  folder / encrypt / push / done`), shown on every screen except
-  Welcome and Done
+- a **stepper band** (`welcome / provider / server / auth /
+  folder / encrypt / done`), shown on every screen except Welcome
+  and Done
 - a **body** drawn by the screen
 - a **keybar** along the bottom with chip-style key + label pairs
 
@@ -30,25 +30,10 @@ The 8-step indices are mapped from `Screen::stepper_index()` in
 | `NextcloudLoginFlow` | `setup › auth › login flow` | 3 | See [`login-flow.md`](login-flow.md). Two-col: QR panel left, link/status panel right. Single-col fallback when terminal is narrow. |
 | `RemoteFolder` | `setup › folder` | 4 | Path form field with core-validated path tag. |
 | `Collision` | `setup › collision` | 4 | Three radio rows (Rename / Overwrite / Fail) + a Dim "preview" panel that adapts to the focused choice. |
-| `TestUpload` | `setup › probe` | 4 | Three Check rows (`ensure folder` / `upload tiny file` / `cleanup`). Two-stage probe with live progress; cleanup is `Skip` until TASK 27 lands. |
+| `TestUpload` | `setup › probe` | 4 | Three Check rows (`ensure folder` / `upload tiny file` / `cleanup`). Two-stage probe with live progress; cleanup currently shows `Skip` until follow-up work lands. |
 | `InnerAlias` | `setup › alias` | – | Single bordered input pre-filled with a `<provider>-<adj>-<noun>-NN` mnemonic suggestion. Reached after `TestUpload` in every wizard mode (first-profile + add-inner) so the operator always picks a deliberate alias instead of inheriting a placeholder. `Tab` regenerates the suggestion; `Enter` confirms. From here the first-profile flow advances to `ProfilePassphrase`; the add-inner flow appends to the unlocked container directly. |
 | `ProfilePassphrase` | `setup › encrypt` | 5 | See [`profile-passphrase.md`](profile-passphrase.md). Two masked form fields, zxcvbn strength bar, weak-passphrase warning sub-state. |
-| `Done` | `done` | 7 | CLI cheat sheet + `p · push to zz-drop.net` keybar entry. |
-
-## Push sub-flow (TASK 20 Phase 2)
-
-Reachable from the **Done** screen with `p`. The three screens
-share `PushFlowState` and walk through stages
-`AccountForm → AccountSending → (TotpForm → TotpSending) → PushFetching → PushForm → PushSending → Done | Failed`.
-
-| Screen | Breadcrumb | Step | Body |
-|---|---|---|---|
-| `Account` | `push › account` | 6 | Mint panel with `email` and `password` form fields. Password is `TextInput::masked`. Footer shows `…  contacting server` while the login HTTP call is in flight. |
-| `LoginTotp` | `push › account › 2fa` | 6 | Cyan panel with a single `code` field. Accepts both 6-digit TOTP codes and recovery codes — the server distinguishes by length. |
-| `PushProfile` | `push › alias` | 6 | Mint panel with the operator's existing aliases (↑↓ to pick, stepping past the last entry switches to "type a new alias" mode). On success, the screen flips to a green ✓ summary; on failure, to a red error panel. |
-
-The bearer token issued by the login lives only in `PushFlowState`
-during the run — it is not persisted across `zz-tui` invocations.
+| `Done` | `done` | 7 | CLI cheat sheet. |
 
 ## Common keybindings
 
@@ -70,8 +55,7 @@ itself. Notable screen-specific bindings:
   success, retries on failure
 - **Profile passphrase (weak warning)** — `y` continue anyway,
   `n` go back to editing
-- **Done** — `p` enter the push sub-flow (only when `profile.zz`
-  was successfully written), `q` exit
+- **Done** — `q` exit
 
 ## Layout primitives
 
@@ -100,4 +84,3 @@ unit test that asserts a known glyph or a buffer-contents invariant.
 | `NO_COLOR=1` | `Color::Rgb` accessors degrade to `BOLD`/`DIM`/`UNDERLINED`/`REVERSED` modifiers; all status remains readable |
 | Long URL on Login Flow | middle-ellipsis truncation in the panel; full URL available in the `u` modal |
 | Inline-image QR not reliable on the host terminal | half-block ASCII fallback; pane width auto-sized so the QR keeps a 1:1 aspect ratio |
-| Long alias list on PushProfile | the picker scrolls implicitly (rendering cuts off at the panel inner height) |

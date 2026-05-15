@@ -13,13 +13,10 @@ exclude = [".github/"]
 dist = true
 
 [features]
-# v1 ships local-only. Anything that talks to `zz-drop.net`
-# (account login/signup, alias create/list/delete, container
-# push/pull) is gated behind this flag. Enabling it adds the
-# remote surface; the default build has no network code, no
-# DNS resolution, no `zz-drop.net` strings reachable at runtime.
-# Graduates default-on in v2.
 default = []
+# Internal feature gate for in-development account-side surface.
+# Default builds have no network code or host strings reachable
+# at runtime under this flag.
 remote = []
 
 [dependencies]

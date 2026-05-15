@@ -20,16 +20,13 @@ GitHub issues are fine.
 `zz-drop` is the **CLI binary + local agent** in the same
 executable. It does not run an HTTP server. v1 connects only to
 the configured cloud provider (Nextcloud via WebDAV, Google Drive
-via OAuth 2.0 device flow); the API path to a
-`zz-drop.net`-compatible server is gated behind a Cargo feature
-`remote`, default-off in v1 (graduates default-on in v2 — see
-`docs/feature-flags.md`).
+via OAuth 2.0 device flow).
 
 This repository's contribution to the project's security posture:
 
 - Argon2id-derived KEK + XChaCha20-Poly1305 AEAD for the
-  `profiles-{local,remote}.zz` containers (the encryption
-  pipeline lives in `zz-drop-core`).
+  `profiles-local.zz` container (the encryption pipeline lives
+  in `zz-drop-core`).
 - KEK held by the agent in `Zeroizing<[u8; 32]>`; re-encrypts the
   container with a fresh nonce on every write (inner-profile
   append, OAuth token refresh) so KEK + nonce reuse is impossible
@@ -47,16 +44,11 @@ This repository's contribution to the project's security posture:
 - **The user account on the local machine is trusted.** zz-drop
   does not defend against another process running under your UID.
 - **`config.toml` never contains secrets.** Provider credentials
-  live encrypted inside `profiles-{local,remote}.zz`. Session
-  tokens live in the agent's RAM only.
-- **No recovery if the container passphrase is lost** in v1. A
-  v1.1 milestone introduces an opt-in BIP39 recovery key alongside
-  the file-content E2EE work; the design is frozen in
-  [`docs/file-encryption.md`](docs/file-encryption.md).
-- **v1 ships local-only.** The `remote` feature is off by default;
-  the default binary contains no network code that targets the
-  `zz-drop.net` API and no `zz-drop.net` host string — see
-  `docs/feature-flags.md` for the lifecycle.
+  live encrypted inside `profiles-local.zz`. Session tokens live
+  in the agent's RAM only.
+- **No recovery if the container passphrase is lost.** Pick a
+  passphrase you can remember; the only way back from a lost one
+  is `zz w` and a fresh setup.
 
 ## Pre-alpha hardening pass
 

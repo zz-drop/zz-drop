@@ -17,13 +17,16 @@ explicit, fast.
 ## Install
 
 ```bash
-# macOS / Linux (Homebrew tap) — installs both `zz-drop` (CLI)
-# and `zz-tui` (configuration TUI) in one shot.
+# macOS — Homebrew tap (preferred). Installs `zz-drop` + `zz-tui`,
+# wires bash/zsh/fish completions, links `zz` to `zz-drop` if free.
 brew install zz-drop/zz-drop/zz-drop
 
-# Or curl-installer (signed binaries, no Homebrew needed)
+# Linux & WSL — signed binaries via curl-installer (preferred).
+# Also works on macOS if you prefer no package manager.
 curl -fsSL https://github.com/zz-drop/zz-drop/releases/latest/download/zz-drop-installer.sh | sh
 ```
+
+No install path needs root.
 
 Every release artifact is signed with [minisign](https://jedisct1.github.io/minisign/);
 the public key is [`release-key.pub`](release-key.pub).
@@ -89,6 +92,9 @@ select, filename colors) is opt-in via six lines in `~/.zshrc`,
 scoped to `zz` only so it leaves `git`, `ls`, `cd`'s TAB
 behaviour untouched.
 
+Brew install handles this for you. Manual install (other paths,
+or to override):
+
 ```bash
 zz --completions bash | source
 zz --completions zsh  > ~/.zfunc/_zz       # then `compinit`
@@ -112,7 +118,7 @@ Use the TUI to:
   Flow, or Nextcloud app-password)
 - set or rotate the master passphrase
 - add / remove inner profiles inside the container
-- run diagnostics, push / recover a remote profile copy
+- run diagnostics
 
 The TUI is **setup-only**. Daily file moves stay in the CLI.
 
@@ -124,12 +130,8 @@ target per profile, the local agent, the configuration TUI.
 Out: file sync, mount-as-FS, public share links, generic remote
 file manager, team / org access.
 
-v1 ships **local-only** by default. The account-side surface
-(login on `zz-drop.net`, profile push / recover) graduates from
-the `remote` Cargo feature in v2 — the default `cargo build`
-has no `zz-drop.net` strings, no DNS resolution toward it, no
-network code that targets it. See
-[`docs/feature-flags.md`](docs/feature-flags.md).
+The next features in flight are listed in the [project
+roadmap](https://github.com/zz-drop).
 
 ## Documentation
 
@@ -143,8 +145,6 @@ network code that targets it. See
   layout, token handshake, lock / TTL semantics
 - [`docs/sacs.md`](docs/sacs.md) — state-aware completion
   internals
-- [`docs/file-encryption.md`](docs/file-encryption.md) — `.zzd`
-  blob format for client-side file E2EE (v1.1)
 - [`docs/profile-format.md`](docs/profile-format.md) —
   `profile.zz` envelope and payload schema
 - [`docs/providers/`](docs/providers/) — per-provider notes

@@ -1,17 +1,14 @@
-# `profiles-{local,remote}.zz` format
+# `profiles-local.zz` format
 
-## File names
+## File name
 
 - `profiles-local.zz` — encrypted container kept only on this machine
-- `profiles-remote.zz` — encrypted container cached from the
-  `zz-drop.net` API server
 
 A single file holds **N** inner profiles; daily commands operate on
-the inner profile last selected by `zz z {local,remote}`.
+the inner profile last selected by `zz z`.
 
-The legacy single-profile shapes (`profile.zz`,
-`profile-{local,remote}.zz`) are recognised on read for the sole
-purpose of refusing them with `LegacyFormat`. There is no
+The legacy single-profile shape (`profile.zz`) is recognised on read
+for the sole purpose of refusing it with `LegacyFormat`. There is no
 auto-migration.
 
 ## Envelope v1
@@ -55,37 +52,31 @@ Each `PlainProfile` carries:
 - `profile_version`
 - `profile_id`
 - `alias` — operator-chosen mnemonic, used both as the human label in
-  the picker and as the persistence key in the `last-default-{local,
-  remote}` sidecars
+  the picker and as the persistence key in the `last-default-local`
+  sidecar
 - `default_target`
-- one provider config (Nextcloud / Google Drive / OneDrive / Proton)
+- one provider config (Nextcloud / Google Drive / OneDrive / Dropbox)
 - auth secret(s)
 - collision policy
 - agent settings
 - created/updated timestamps
 
 The `ProfileSet` does **not** carry a `default_alias` field. The
-"last selected" alias lives only in the plaintext sidecar files
-`last-default-local` (one line `<alias>\n`) and `last-default-remote`
-(two lines `<email>\n<alias>\n`); the in-memory agent caches it
-between operations within a session.
+"last selected" alias lives only in the plaintext sidecar file
+`last-default-local` (one line `<alias>\n`); the in-memory agent
+caches it between operations within a session.
 
 ### Sidecar size + charset rules
 
 - max 256 bytes
 - chmod 0600
 - alias: printable ASCII, no NUL, no `/`, no `..`, length 1–64
-- email: contains `@`, no whitespace, no control chars, length ≤ 254
 - any failure mode (missing, oversized, malformed) silently falls
   back to the interactive picker
 
-### Capacity limits
+### Capacity
 
-- Local container: no count limit
-- Remote container: max 5 inner profiles. Server enforces both a
-  count cap (defense-in-depth, declared by the client) and a blob
-  byte cap (crypto-safe, measured server-side). Both limits are
-  returned at login as part of `ServerPolicy`.
+- Local container: no count limit.
 
 ## Crypto
 

@@ -56,7 +56,6 @@ session tokens never appear here:
 
 ```toml
 # zz-drop config — never put secrets here
-server_base_url = "https://zz-drop.net"
 default_alias = "casa-nc"  # optional, last alias used
 ```
 
@@ -64,7 +63,6 @@ Defaults:
 
 | Field | Default |
 |---|---|
-| `server_base_url` | `"https://zz-drop.net"` |
 | `default_alias` | (omitted) |
 
 A missing config file is treated as defaults. A malformed config
