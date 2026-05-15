@@ -20,13 +20,27 @@ publish-jobs = ["homebrew"]
 publish-prereleases = true
 # Custom jobs spliced into release.yml after announce. Each entry
 # points to a reusable workflow (`workflow_call`) inside this
-# repo. `sign-release.yml` signs every release artifact with
-# minisign.
-post-announce-jobs = ["./sign-release"]
+# repo:
+#   sign-release   — minisign-sign every release artifact
+#   patch-formula  — append a conditional `zz` symlink to the
+#                    auto-generated brew formula in the tap.
+post-announce-jobs = ["./sign-release", "./patch-formula"]
 # Target platforms to build apps for (Rust target-triple syntax).
 # Unix-only: the local agent uses Unix domain sockets and rustix
 # Unix-specific syscalls — Windows is out of scope for v1.
-targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
+# Both linux-gnu (Ubuntu/Debian/Fedora/Arch/...) and linux-musl
+# (Alpine, headless containers) are shipped — the curl installer
+# picks the right one via `ldd --version` detection. Pure-rust
+# stack (ureq + rustls + ring), no openssl-sys, so musl builds
+# need no special workaround.
+targets = [
+    "aarch64-apple-darwin",
+    "aarch64-unknown-linux-gnu",
+    "aarch64-unknown-linux-musl",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+]
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
 # Where to host releases

@@ -1,0 +1,167 @@
+name: Patch brew formula
+
+# Called from release.yml as a post-announce job (see
+# `post-announce-jobs` in dist-workspace.toml). cargo-dist's
+# homebrew-publish job has already committed the auto-generated
+# `Formula/zz-drop.rb` into the tap by the time announce fires;
+# this job patches it so `brew install` also wires shell
+# completions and a conditional `zz` symlink, and `brew uninstall`
+# cleans up the symlink if it still points at us.
+#
+# Idempotent: each block is gated on a string marker so re-runs
+# are no-ops.
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        description: "dist-manifest JSON string from cargo-dist plan"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    env:
+      TAP_REPO: zz-drop/homebrew-zz-drop
+      FORMULA: Formula/zz-drop.rb
+    steps:
+      - name: Clone the tap
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config --global user.name  "zz-drop release bot"
+          git config --global user.email "release-bot@users.noreply.github.com"
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" tap
+
+      - name: Patch formula (completions + zz symlink + cleanup + caveats)
+        working-directory: tap
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          p = Path(os.environ["FORMULA"])
+          src = p.read_text()
+          changed = False
+
+          # 1. Wire SACS shell completions inside cargo-dist's
+          #    `def install`. Anchor on `install_binary_aliases!`,
+          #    which is unique to cargo-dist's binary-install
+          #    template and survives the per-platform `bin.install`
+          #    lines being conditionalised. FATAL if missing — we
+          #    refuse to ship a half-patched formula.
+          # Single-line form keeps rubocop's Layout/ArgumentAlignment
+          # quiet (the multi-line equivalent must align args under
+          # the first arg column). 105 chars including indent —
+          # under brew's 118-char line limit.
+          completions_anchor = "    install_binary_aliases!\n"
+          completions_block = (
+              "\n"
+              "    generate_completions_from_executable("
+              "bin/\"zz-drop\", \"--completions\", "
+              "shells: [:bash, :zsh, :fish])\n"
+          )
+          if "generate_completions_from_executable" in src:
+              print("completions already wired; skip")
+          else:
+              if completions_anchor not in src:
+                  sys.exit(
+                      f"FATAL: anchor not found in {p}: "
+                      f"{completions_anchor!r}. cargo-dist install "
+                      "block format may have changed."
+                  )
+              src = src.replace(
+                  completions_anchor,
+                  completions_anchor + completions_block,
+                  1,
+              )
+              changed = True
+              print("inserted generate_completions_from_executable")
+
+          # 2. Append `def post_install`, `def uninstall_postflight`
+          #    and `def caveats` before the trailing `end`. Each is
+          #    gated on its own `def <name>` marker so we can add
+          #    methods independently if the formula was previously
+          #    patched with only a subset (the original workflow
+          #    only injected post_install).
+          def insert_method(src, method_name, block):
+              if f"def {method_name}" in src:
+                  print(f"def {method_name} already present; skip")
+                  return src, False
+              lines = src.rstrip().splitlines()
+              if lines[-1].strip() != "end":
+                  sys.exit("FATAL: unexpected formula tail (last line not `end`)")
+              new_src = "\n".join(lines[:-1]) + block + "end\n"
+              print(f"appended def {method_name}")
+              return new_src, True
+
+          # Each block starts with `"\n\n"`: the `"\n".join` of the
+          # preceding lines does not leave a trailing newline, so a
+          # single `"\n"` would produce `end<NL>def` (no blank line)
+          # and rubocop's Layout/EmptyLineBetweenDefs would fail.
+          # `if !zz.symlink? && !zz.exist?` instead of
+          # `unless zz.symlink? || zz.exist?` to satisfy rubocop's
+          # Style/UnlessLogicalOperators (no logical operator in an
+          # `unless`). Both forms cover broken symlinks: without
+          # `symlink?`, a stale link with a missing target would
+          # survive the guard and the next `make_symlink` would
+          # raise EEXIST.
+          post_install_block = (
+              "\n\n"
+              "  def post_install\n"
+              "    zz = HOMEBREW_PREFIX/\"bin/zz\"\n"
+              "    zz.make_symlink opt_bin/\"zz-drop\" if !zz.symlink? && !zz.exist?\n"
+              "  end\n"
+          )
+          # Only touch `bin/zz` if it is a symlink we own. Real
+          # files or symlinks pointing elsewhere are user-managed.
+          uninstall_block = (
+              "\n\n"
+              "  def uninstall_postflight\n"
+              "    zz = HOMEBREW_PREFIX/\"bin/zz\"\n"
+              "    zz.unlink if zz.symlink? && zz.readlink == opt_bin/\"zz-drop\"\n"
+              "  end\n"
+          )
+          caveats_block = (
+              "\n\n"
+              "  def caveats\n"
+              "    <<~EOS\n"
+              "      A `zz` shorthand was linked to `zz-drop` if no `zz` already\n"
+              "      existed in your PATH. Shell completions for bash, zsh and\n"
+              "      fish were installed automatically.\n"
+              "      If you later install another command named `zz`, remove\n"
+              "      #{HOMEBREW_PREFIX}/bin/zz and reinstall.\n"
+              "    EOS\n"
+              "  end\n"
+          )
+
+          src, c1 = insert_method(src, "post_install", post_install_block)
+          src, c2 = insert_method(src, "uninstall_postflight", uninstall_block)
+          src, c3 = insert_method(src, "caveats", caveats_block)
+          changed = changed or c1 or c2 or c3
+
+          if changed:
+              p.write_text(src)
+              print("wrote", p)
+          else:
+              print("nothing to do")
+          PY
+
+      - name: Commit and push
+        working-directory: tap
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "no changes to commit"
+            exit 0
+          fi
+          git add "${FORMULA}"
+          git commit -m "Wire completions + link zz + cleanup + caveats"
+          git push
