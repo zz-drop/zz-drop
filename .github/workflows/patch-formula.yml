@@ -4,12 +4,20 @@ name: Patch brew formula
 # `post-announce-jobs` in dist-workspace.toml). cargo-dist's
 # homebrew-publish job has already committed the auto-generated
 # `Formula/zz-drop.rb` into the tap by the time announce fires;
-# this job patches it so `brew install` also wires shell
-# completions and a conditional `zz` symlink, and `brew uninstall`
-# cleans up the symlink if it still points at us.
+# this job patches it so `brew install` also wires SACS shell
+# completions and a `zz` shorthand. Both are inserted into
+# `def install` so they live in the cellar and `brew uninstall`
+# reverses them automatically.
 #
-# Idempotent: each block is gated on a string marker so re-runs
-# are no-ops.
+# Why not a custom `def post_install` for the symlink? brew's
+# Formula API has no symmetric `uninstall_postflight` hook (it's
+# a Ruby method definition that brew silently accepts and never
+# calls), so a symlink created outside the cellar survives as a
+# broken link after `brew uninstall`. `bin.install_symlink` puts
+# it inside the cellar where brew tracks it.
+#
+# Idempotent: each insertion is gated on its own marker so
+# re-runs are no-ops.
 
 on:
   workflow_call:
@@ -38,7 +46,7 @@ jobs:
           git config --global user.email "release-bot@users.noreply.github.com"
           git clone "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" tap
 
-      - name: Patch formula (completions + zz symlink + cleanup + caveats)
+      - name: Patch formula (completions + zz symlink, both cellar-tracked)
         working-directory: tap
         run: |
           set -euo pipefail
@@ -49,109 +57,67 @@ jobs:
 
           p = Path(os.environ["FORMULA"])
           src = p.read_text()
-          changed = False
 
-          # 1. Wire SACS shell completions inside cargo-dist's
-          #    `def install`. Anchor on `install_binary_aliases!`,
-          #    which is unique to cargo-dist's binary-install
-          #    template and survives the per-platform `bin.install`
-          #    lines being conditionalised. FATAL if missing — we
-          #    refuse to ship a half-patched formula.
-          # Single-line form keeps rubocop's Layout/ArgumentAlignment
-          # quiet (the multi-line equivalent must align args under
-          # the first arg column). 105 chars including indent —
-          # under brew's 118-char line limit.
-          completions_anchor = "    install_binary_aliases!\n"
-          completions_block = (
+          # Anchor on cargo-dist's `install_binary_aliases!` line:
+          # unique to its binary-install template, survives the
+          # per-platform `bin.install` lines being conditionalised
+          # by OS / arch. FATAL if missing — we refuse to ship a
+          # half-patched formula.
+          #
+          # Two lines inserted after the anchor:
+          # 1. `generate_completions_from_executable` — brew DSL
+          #    that runs the binary three times to capture bash,
+          #    zsh, fish completion scripts and drops them into
+          #    `share/{bash-completion/completions,zsh/site-functions,
+          #    fish/vendor_completions.d}`. Cellar-tracked.
+          # 2. `bin.install_symlink bin/"zz-drop" => "zz"` — the
+          #    `zz` shorthand, also inside the cellar so brew
+          #    unlinks it on uninstall. If the user already has a
+          #    `zz` in their PATH, brew fails at link time with a
+          #    standard "Target ... already exists" message and
+          #    the user can `brew link --overwrite` or remove
+          #    their conflict.
+          #
+          # Single-line `generate_completions_from_executable`
+          # form keeps rubocop's Layout/ArgumentAlignment quiet
+          # (multi-line variant must align args under the first
+          # arg column); 105 chars including indent, under brew's
+          # 118-char line limit.
+          anchor = "    install_binary_aliases!\n"
+          insertion = (
               "\n"
               "    generate_completions_from_executable("
               "bin/\"zz-drop\", \"--completions\", "
               "shells: [:bash, :zsh, :fish])\n"
+              "    bin.install_symlink bin/\"zz-drop\" => \"zz\"\n"
           )
-          if "generate_completions_from_executable" in src:
-              print("completions already wired; skip")
-          else:
-              if completions_anchor not in src:
-                  sys.exit(
-                      f"FATAL: anchor not found in {p}: "
-                      f"{completions_anchor!r}. cargo-dist install "
-                      "block format may have changed."
-                  )
-              src = src.replace(
-                  completions_anchor,
-                  completions_anchor + completions_block,
-                  1,
+
+          # Per-line idempotency: skip if both already present
+          # (re-run on already-patched formula); FATAL if only
+          # one is present (partial state needs human attention).
+          have_completions = "generate_completions_from_executable" in src
+          have_symlink = 'bin.install_symlink bin/"zz-drop" => "zz"' in src
+
+          if have_completions and have_symlink:
+              print("nothing to do (both already wired)")
+              sys.exit(0)
+
+          if have_completions or have_symlink:
+              sys.exit(
+                  "FATAL: partial patch state — completions wired "
+                  "without `zz` symlink, or vice versa. Manual "
+                  "cleanup of the formula required."
               )
-              changed = True
-              print("inserted generate_completions_from_executable")
 
-          # 2. Append `def post_install`, `def uninstall_postflight`
-          #    and `def caveats` before the trailing `end`. Each is
-          #    gated on its own `def <name>` marker so we can add
-          #    methods independently if the formula was previously
-          #    patched with only a subset (the original workflow
-          #    only injected post_install).
-          def insert_method(src, method_name, block):
-              if f"def {method_name}" in src:
-                  print(f"def {method_name} already present; skip")
-                  return src, False
-              lines = src.rstrip().splitlines()
-              if lines[-1].strip() != "end":
-                  sys.exit("FATAL: unexpected formula tail (last line not `end`)")
-              new_src = "\n".join(lines[:-1]) + block + "end\n"
-              print(f"appended def {method_name}")
-              return new_src, True
+          if anchor not in src:
+              sys.exit(
+                  f"FATAL: anchor not found in {p}: {anchor!r}. "
+                  "cargo-dist install block format may have changed."
+              )
 
-          # Each block starts with `"\n\n"`: the `"\n".join` of the
-          # preceding lines does not leave a trailing newline, so a
-          # single `"\n"` would produce `end<NL>def` (no blank line)
-          # and rubocop's Layout/EmptyLineBetweenDefs would fail.
-          # `if !zz.symlink? && !zz.exist?` instead of
-          # `unless zz.symlink? || zz.exist?` to satisfy rubocop's
-          # Style/UnlessLogicalOperators (no logical operator in an
-          # `unless`). Both forms cover broken symlinks: without
-          # `symlink?`, a stale link with a missing target would
-          # survive the guard and the next `make_symlink` would
-          # raise EEXIST.
-          post_install_block = (
-              "\n\n"
-              "  def post_install\n"
-              "    zz = HOMEBREW_PREFIX/\"bin/zz\"\n"
-              "    zz.make_symlink opt_bin/\"zz-drop\" if !zz.symlink? && !zz.exist?\n"
-              "  end\n"
-          )
-          # Only touch `bin/zz` if it is a symlink we own. Real
-          # files or symlinks pointing elsewhere are user-managed.
-          uninstall_block = (
-              "\n\n"
-              "  def uninstall_postflight\n"
-              "    zz = HOMEBREW_PREFIX/\"bin/zz\"\n"
-              "    zz.unlink if zz.symlink? && zz.readlink == opt_bin/\"zz-drop\"\n"
-              "  end\n"
-          )
-          caveats_block = (
-              "\n\n"
-              "  def caveats\n"
-              "    <<~EOS\n"
-              "      A `zz` shorthand was linked to `zz-drop` if no `zz` already\n"
-              "      existed in your PATH. Shell completions for bash, zsh and\n"
-              "      fish were installed automatically.\n"
-              "      If you later install another command named `zz`, remove\n"
-              "      #{HOMEBREW_PREFIX}/bin/zz and reinstall.\n"
-              "    EOS\n"
-              "  end\n"
-          )
-
-          src, c1 = insert_method(src, "post_install", post_install_block)
-          src, c2 = insert_method(src, "uninstall_postflight", uninstall_block)
-          src, c3 = insert_method(src, "caveats", caveats_block)
-          changed = changed or c1 or c2 or c3
-
-          if changed:
-              p.write_text(src)
-              print("wrote", p)
-          else:
-              print("nothing to do")
+          src = src.replace(anchor, anchor + insertion, 1)
+          p.write_text(src)
+          print("patched: completions + bin.install_symlink zz")
           PY
 
       - name: Commit and push
@@ -163,5 +129,5 @@ jobs:
             exit 0
           fi
           git add "${FORMULA}"
-          git commit -m "Wire completions + link zz + cleanup + caveats"
+          git commit -m "Wire completions + bin.install_symlink zz"
           git push
