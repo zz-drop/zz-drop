@@ -140,10 +140,18 @@ impl std::fmt::Display for FlagError {
 
 impl std::error::Error for FlagError {}
 
-/// Walk the front of `argv` consuming recognised global flags.
-/// Stops at the first non-flag token (verb / path) or at the
-/// `--` terminator (which is consumed). Returns the parsed flags
-/// plus the residual argv that the verb parser sees.
+/// Walk `argv` consuming recognised global flags wherever they
+/// appear (before or after the verb). The only thing that
+/// terminates parsing is the bare `--` token — everything after
+/// it goes through verbatim as a positional. Returns the parsed
+/// flags plus the residual argv the verb parser sees.
+///
+/// Single-pass design: scripts commonly write
+/// `zz s file.md --json` or `zz d 'glob' --json --alias x`, so
+/// the pre-pass must accept flags after the verb. The grammar
+/// has no verb-level long flags — every `--name` we encounter
+/// before the `--` terminator is unambiguously a global flag,
+/// or it's a typo we surface as `UnknownFlag`.
 ///
 /// Does NOT consult env vars. Use [`merge_env`] on the result to
 /// apply the precedence chain.
@@ -154,23 +162,24 @@ pub fn extract_flags(argv: Vec<String>) -> Result<(GlobalFlags, Vec<String>), Fl
 
     while let Some(tok) = iter.next() {
         // Bare `--` terminates global-flag parsing; everything
-        // after it is verbatim positional.
+        // after it is verbatim positional (the convention that
+        // lets you `zz -- --weird-filename`).
         if tok == "--" {
             residual.extend(iter.by_ref());
             break;
         }
-        // First non-flag token is the start of the verb / path
-        // sequence. Push it back and bail.
+        // Non-flag tokens are positional — verb, files, prefixes.
+        // They go to the verb parser; we keep scanning for more
+        // global flags afterwards.
         if !tok.starts_with("--") {
             residual.push(tok);
-            residual.extend(iter.by_ref());
-            break;
+            continue;
         }
 
         // From here on, tok is `--name` or `--name=value`. We
-        // split on `=` against a local owned copy so that the
-        // owned `tok` stays free for moving into the error path
-        // if the name isn't recognised.
+        // split on `=` against a local owned copy so the owned
+        // `tok` stays free for moving into the error path if the
+        // name isn't recognised.
         let head = tok.clone();
         let (name, inline_value) = split_eq(&head);
 
@@ -459,12 +468,55 @@ mod tests {
     }
 
     #[test]
-    fn flag_after_positional_is_left_for_verb_parser() {
-        // Global flags accepted only before the first non-flag
-        // token; trailing tokens are verbatim.
+    fn flag_after_positional_is_still_consumed() {
+        // Global flags are recognized anywhere on argv, not just
+        // before the verb. The residual the verb parser sees
+        // contains only positionals.
         let (f, r) = extract(&["s", "file.md", "--json"]).unwrap();
+        assert_eq!(f.output, OutputMode::Json);
+        assert_eq!(r, vec!["s", "file.md"]);
+    }
+
+    #[test]
+    fn flag_interleaved_with_positionals_works() {
+        let (f, r) = extract(&[
+            "s", "--json", "file.md", "--alias", "work", "dir/",
+        ])
+        .unwrap();
+        assert_eq!(f.output, OutputMode::Json);
+        assert_eq!(f.alias.as_deref(), Some("work"));
+        assert_eq!(r, vec!["s", "file.md", "dir/"]);
+    }
+
+    #[test]
+    fn flags_after_verb_match_documented_cookbook_shape() {
+        // `zz d 'glob' --json --alias x` — the shape every CI
+        // example uses.
+        let (f, r) = extract(&["d", "reports/*.pdf", "--json", "--alias", "web-prod"]).unwrap();
+        assert_eq!(f.output, OutputMode::Json);
+        assert_eq!(f.alias.as_deref(), Some("web-prod"));
+        assert_eq!(r, vec!["d", "reports/*.pdf"]);
+    }
+
+    #[test]
+    fn double_dash_terminator_still_freezes_remaining_flags() {
+        // After `--`, even a token that looks like a global flag
+        // is verbatim positional. Lets users upload a file
+        // literally named `--json`.
+        let (f, r) = extract(&["s", "--", "--json"]).unwrap();
         assert_eq!(f.output, OutputMode::Text);
-        assert_eq!(r, vec!["s", "file.md", "--json"]);
+        assert_eq!(r, vec!["s", "--json"]);
+    }
+
+    #[test]
+    fn unknown_flag_after_verb_is_still_rejected() {
+        // The grammar has no verb-level long flags, so any `--*`
+        // that isn't a known global flag (and isn't past `--`)
+        // is a typo.
+        match extract(&["s", "file.md", "--bogus"]).unwrap_err() {
+            FlagError::UnknownFlag { token } => assert_eq!(token, "--bogus"),
+            other => panic!("unexpected: {other:?}"),
+        }
     }
 
     // ---- merge_env -----------------------------------------------------

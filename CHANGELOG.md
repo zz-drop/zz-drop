@@ -13,6 +13,23 @@ surfaces frozen on the road to 1.0 are listed in
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-05-16
+
+### Fixed
+
+- **Global flags after the verb** — `--json`, `--quiet`,
+  `--passphrase-file`, `--alias`, `--local`, `--remote`,
+  `--yes` are now consumed wherever they appear on the
+  command line (e.g. `zz f --json`, `zz d note.txt --json`).
+  Previously the pre-pass stopped at the first positional, so
+  flags placed after the verb were forwarded to the verb
+  parser and rejected. The `--` terminator still freezes any
+  remaining flags as positionals.
+- **`zz dx` bundle extraction** — recognises GNU tar magic
+  (`ustar ` at offset 257) in addition to POSIX `ustar\0`, so
+  bundles produced by GNU tar are detected and unpacked
+  instead of being treated as opaque blobs.
+
 ## [0.9.0] — 2026-05-16
 
 First release on the 0.9 stabilisation track. Adds the
