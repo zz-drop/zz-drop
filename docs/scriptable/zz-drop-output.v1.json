@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zz-drop.net/schemas/zz-drop-output.v1.json",
+  "title": "zz-drop NDJSON event schema v1",
+  "description": "One JSON object per stdout line emitted by `zz <verb> --json`. Stable from 1.0.0 onward. See docs/scriptable.md for prose.",
+  "type": "object",
+  "required": ["v", "event", "ts"],
+  "properties": {
+    "v": {
+      "type": "string",
+      "const": "1",
+      "description": "Schema version. Stable for the lifetime of v1.x."
+    },
+    "event": {
+      "type": "string",
+      "enum": [
+        "uploaded",
+        "downloaded",
+        "failed",
+        "batch_summary",
+        "unlocked",
+        "locked",
+        "wiped",
+        "doctor_check",
+        "doctor_summary"
+      ]
+    },
+    "ts": {
+      "type": "string",
+      "description": "UTC RFC 3339, second precision, Z suffix.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/Uploaded" },
+    { "$ref": "#/$defs/Downloaded" },
+    { "$ref": "#/$defs/Failed" },
+    { "$ref": "#/$defs/BatchSummary" },
+    { "$ref": "#/$defs/Unlocked" },
+    { "$ref": "#/$defs/Locked" },
+    { "$ref": "#/$defs/Wiped" },
+    { "$ref": "#/$defs/DoctorCheck" },
+    { "$ref": "#/$defs/DoctorSummary" }
+  ],
+  "$defs": {
+    "Reason": {
+      "type": "string",
+      "description": "Closed-but-extensible failure reason. Each variant maps 1:1 to a process exit code.",
+      "enum": [
+        "usage",
+        "not_implemented",
+        "agent_unreachable",
+        "profile_missing",
+        "decrypt_failed",
+        "wipe_cancelled",
+        "provider_error",
+        "agent_locked",
+        "passphrase_file_permissions",
+        "interactive_required",
+        "interactive_only",
+        "alias_ambiguous",
+        "container_ambiguous"
+      ]
+    },
+
+    "Uploaded": {
+      "type": "object",
+      "required": ["v", "event", "ts", "file", "bytes", "alias", "target"],
+      "properties": {
+        "v": { "const": "1" },
+        "event": { "const": "uploaded" },
+        "ts": { "type": "string" },
+        "file": { "type": "string", "description": "Final cloud leaf name (post-rename-on-collision)." },
+        "bytes": { "type": "integer", "minimum": 0, "description": "Bytes as uploaded (compressed count when applicable)." },
+        "compressed_pct": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 99,
+          "description": "Saved % when zstd ran. Absent on raw uploads."
+        },
+        "alias": { "type": "string" },
+        "target": { "type": "string", "description": "<host>/<remote_root> or <provider_kind>/<remote_root>." }
+      },
+      "additionalProperties": false
+    },
+
+    "Downloaded": {
+      "type": "object",
+      "required": ["v", "event", "ts", "file", "bytes", "alias", "target"],
+      "properties": {
+        "v": { "const": "1" },
+        "event": { "const": "downloaded" },
+        "ts": { "type": "string" },
+        "file": { "type": "string" },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "alias": { "type": "string" },
+        "target": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "Failed": {
+      "type": "object",
+      "required": ["v", "event", "ts", "reason"],
+      "properties": {
+        "v": { "const": "1" },
+        "event": { "const": "failed" },
+        "ts": { "type": "string" },
+        "file": {
+          "type": "string",
+          "description": "Present when the failure was per-file inside an unlocked session."
+        },
+        "reason": { "$ref": "#/$defs/Reason" },
+        "detail": {
+          "type": "string",
+          "description": "Free-form, informative only. Producer escapes control bytes; consumer must never eval / shell-interpolate."
+        },
+        "candidates": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Present only when reason == alias_ambiguous. Candidate alias list."
+        },
+        "alias": { "type": "string" },
+        "target": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "BatchSummary": {
+      "type": "object",
+      "description": "Always last record of a bulk verb (zz s with N files, zz sa, zz da, zz dar, zz sax, zz sarx).",
+      "required": ["v", "event", "ts", "total", "ok", "failed", "exit_code"],
+      "properties": {
+        "v": { "const": "1" },
+        "event": { "const": "batch_summary" },
+        "ts": { "type": "string" },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Equals ok + failed. Skips (dotfiles, symlinks, dirs) are not counted."
+        },
+        "ok": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "exit_code": {
+          "type": "integer",
+          "description": "Mirrors the process exit code so the final NDJSON record carries the verdict."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "Unlocked": {
+      "type": "object",
+      "required": ["v", "event", "ts", "alias", "target"],
+      "properties": {
+        "v": { "const": "1" },
+        "event": { "const": "unlocked" },
+        "ts": { "type": "string" },
+        "alias": { "type": "string" },
+        "target": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "Locked": {
+      "type": "object",
+      "description": "zz q is idempotent — emitted both on a real state transition and on a no-op against an already-locked agent.",
+      "required": ["v", "event", "ts"],
+      "properties": {
+        "v": { "const": "1" },
+        "event": { "const": "locked" },
+        "ts": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "Wiped": {
+      "type": "object",
+      "required": ["v", "event", "ts"],
+      "properties": {
+        "v": { "const": "1" },
+        "event": { "const": "wiped" },
+        "ts": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "DoctorCheck": {
+      "type": "object",
+      "description": "One per probe emitted by zz f --json. Probe names are additive: new probes can appear without bumping the schema version. Consumers must default-case unknown names.",
+      "required": ["v", "event", "ts", "name", "ok"],
+      "properties": {
+        "v": { "const": "1" },
+        "event": { "const": "doctor_check" },
+        "ts": { "type": "string" },
+        "name": { "type": "string" },
+        "ok": { "type": "boolean" },
+        "detail": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "DoctorSummary": {
+      "type": "object",
+      "description": "Final record of zz f --json. ok = no probe contributed to failed[]. Informational probes (e.g. container_local=false because zz c hasn't been run) do not enter failed[].",
+      "required": ["v", "event", "ts", "ok", "failed"],
+      "properties": {
+        "v": { "const": "1" },
+        "event": { "const": "doctor_summary" },
+        "ts": { "type": "string" },
+        "ok": { "type": "boolean" },
+        "failed": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

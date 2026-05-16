@@ -3,6 +3,7 @@ use std::process::ExitCode;
 use zz_drop::agent::{self, ServerConfig};
 use zz_drop::commands::EXIT_USAGE;
 use zz_drop::config;
+use zz_drop::runtime;
 use zz_drop::sacs;
 use zz_drop::{cli, commands, output};
 
@@ -25,7 +26,22 @@ fn main() -> ExitCode {
     init_diag_log("zz");
     zz_drop_core::diag_log::log(&format!("invoke argv={:?}", args));
 
-    let cmd = match cli::parse_args(args) {
+    // Strip global flags (`--json`, `--quiet`, `--passphrase-file`,
+    // `--alias`, `--local`, `--remote`, `--yes`) from the front of
+    // argv and merge env-var overrides (`ZZ_OUTPUT`, …). Errors
+    // here precede any structured output, so they always render as
+    // plain stderr text — exit code EXIT_USAGE.
+    let (flags, residual) = match runtime::parse_global(args) {
+        Ok(pair) => pair,
+        Err(err) => {
+            output::err_line(&format!("{err}"));
+            zz_drop_core::diag_log::log(&format!("flag_err exit={}", EXIT_USAGE));
+            return ExitCode::from(EXIT_USAGE as u8);
+        }
+    };
+    runtime::init(flags);
+
+    let cmd = match cli::parse_args(residual) {
         Ok(cmd) => cmd,
         Err(err) => {
             output::err_line(&format!("{err}"));

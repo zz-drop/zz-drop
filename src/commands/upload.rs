@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use zz_drop_core::crypto::compression::{
     COMPRESS_SKIP_THRESHOLD_BYTES, DEFAULT_COMPRESSION_LEVEL, compress,
 };
+use zz_drop_core::scriptable::Reason;
 use zz_drop_core::{CollisionPolicy, PlainProfile};
 
 use super::batch::BatchSummary;
@@ -39,7 +40,7 @@ pub fn run_upload<R: RemoteFs>(
         );
     }
 
-    summary.exit_code()
+    summary.emit_and_exit_code()
 }
 
 pub fn run_save_all<R: RemoteFs>(
@@ -57,14 +58,19 @@ pub fn run_save_all<R: RemoteFs>(
     let entries = match walk_local(cwd, recursive) {
         Ok(v) => v,
         Err(e) => {
-            output::err_line(&format!("could not walk {}: {e}", cwd.display()));
+            output::emit_failed_bare(
+                Reason::Usage,
+                Some(&format!("could not walk {}: {e}", cwd.display())),
+            );
             return crate::commands::EXIT_USAGE;
         }
     };
 
     if entries.is_empty() {
-        output::line("no files to upload");
-        return crate::commands::EXIT_OK;
+        if crate::runtime::flags().output == crate::runtime::OutputMode::Text {
+            output::line("no files to upload");
+        }
+        return BatchSummary::default().emit_and_exit_code();
     }
 
     let mut summary = BatchSummary::default();
@@ -72,7 +78,7 @@ pub fn run_save_all<R: RemoteFs>(
         upload_walk_entry(remote, &entry, profile, color, &mut summary, dest_remote);
     }
 
-    summary.exit_code()
+    summary.emit_and_exit_code()
 }
 
 /// Bundle mode: tar all selected files into a single archive,
@@ -107,13 +113,18 @@ fn run_save_all_bundle<R: RemoteFs>(
     let entries = match walk_local(cwd, recursive) {
         Ok(v) => v,
         Err(e) => {
-            output::err_line(&format!("could not walk {}: {e}", cwd.display()));
+            output::emit_failed_bare(
+                Reason::Usage,
+                Some(&format!("could not walk {}: {e}", cwd.display())),
+            );
             return crate::commands::EXIT_USAGE;
         }
     };
     if entries.is_empty() {
-        output::line("no files to bundle");
-        return crate::commands::EXIT_OK;
+        if crate::runtime::flags().output == crate::runtime::OutputMode::Text {
+            output::line("no files to bundle");
+        }
+        return BatchSummary::default().emit_and_exit_code();
     }
 
     // Build the tar archive in memory. Streaming-to-tempfile is
@@ -125,17 +136,18 @@ fn run_save_all_bundle<R: RemoteFs>(
         for entry in &entries {
             let archive_path = entry.relative_segments.join("/");
             if let Err(e) = builder.append_path_with_name(&entry.absolute, &archive_path) {
-                output::err_line(&output::render_failed(
+                output::emit_failed_file(
                     &archive_path,
+                    Reason::Usage,
                     &format!("tar: {e}"),
-                    Some(scope),
+                    scope,
                     color,
-                ));
+                );
                 return crate::commands::EXIT_USAGE;
             }
         }
         if let Err(e) = builder.finish() {
-            output::err_line(&format!("tar finalize: {e}"));
+            output::emit_failed_bare(Reason::Usage, Some(&format!("tar finalize: {e}")));
             return crate::commands::EXIT_USAGE;
         }
     }
@@ -143,7 +155,7 @@ fn run_save_all_bundle<R: RemoteFs>(
     let compressed = match compress(&tar_bytes, DEFAULT_COMPRESSION_LEVEL) {
         Ok(b) => b,
         Err(e) => {
-            output::err_line(&format!("zstd: {e}"));
+            output::emit_failed_bare(Reason::Usage, Some(&format!("zstd: {e}")));
             return crate::commands::EXIT_USAGE;
         }
     };
@@ -153,7 +165,7 @@ fn run_save_all_bundle<R: RemoteFs>(
     let staging_parent = cwd.parent().unwrap_or(Path::new("."));
     let tmp_path = staging_parent.join(format!(".zz-{bundle_leaf}.tmp"));
     if let Err(e) = std::fs::write(&tmp_path, &compressed) {
-        output::err_line(&format!("stage bundle: {e}"));
+        output::emit_failed_bare(Reason::Usage, Some(&format!("stage bundle: {e}")));
         return crate::commands::EXIT_USAGE;
     }
 
@@ -182,13 +194,15 @@ fn run_save_all_bundle<R: RemoteFs>(
     );
     let _ = std::fs::remove_file(&tmp_path);
 
-    output::line(&format!(
-        "  · bundled {} files into {}",
-        entries.len(),
-        bundle_leaf,
-    ));
+    if crate::runtime::flags().output == crate::runtime::OutputMode::Text {
+        output::line(&format!(
+            "  · bundled {} files into {}",
+            entries.len(),
+            bundle_leaf,
+        ));
+    }
 
-    summary.exit_code()
+    summary.emit_and_exit_code()
 }
 
 fn upload_one<R: RemoteFs>(
@@ -211,14 +225,14 @@ fn upload_one<R: RemoteFs>(
     let basename = match local.file_name().and_then(|n| n.to_str()) {
         Some(n) if !n.is_empty() => n.to_string(),
         _ => {
-            output::err_line(&output::render_failed(&display, "invalid path", Some(scope), color));
+            output::emit_failed_file(&display, Reason::Usage, "invalid path", scope, color);
             summary.record_failure();
             return;
         }
     };
 
     if basename.starts_with('.') {
-        output::err_line(&output::render_failed(&display, "dotfile", Some(scope), color));
+        output::emit_failed_file(&display, Reason::Usage, "dotfile", scope, color);
         summary.record_skip();
         return;
     }
@@ -226,16 +240,12 @@ fn upload_one<R: RemoteFs>(
     let metadata = match local.symlink_metadata() {
         Ok(m) => m,
         Err(e) => {
-            output::err_line(&output::render_failed(
-                &display,
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    "not found"
-                } else {
-                    "io error"
-                },
-                Some(scope),
-                color,
-            ));
+            let detail = if e.kind() == std::io::ErrorKind::NotFound {
+                "not found"
+            } else {
+                "io error"
+            };
+            output::emit_failed_file(&display, Reason::Usage, detail, scope, color);
             summary.record_failure();
             return;
         }
@@ -243,17 +253,17 @@ fn upload_one<R: RemoteFs>(
 
     let ft = metadata.file_type();
     if ft.is_symlink() {
-        output::err_line(&output::render_failed(&display, "symlink", Some(scope), color));
+        output::emit_failed_file(&display, Reason::Usage, "symlink", scope, color);
         summary.record_skip();
         return;
     }
     if ft.is_dir() {
-        output::err_line(&output::render_failed(&display, "is a directory", Some(scope), color));
+        output::emit_failed_file(&display, Reason::Usage, "is a directory", scope, color);
         summary.record_skip();
         return;
     }
     if !ft.is_file() {
-        output::err_line(&output::render_failed(&display, "not a regular file", Some(scope), color));
+        output::emit_failed_file(&display, Reason::Usage, "not a regular file", scope, color);
         summary.record_skip();
         return;
     }
@@ -293,12 +303,7 @@ fn upload_one_compressed<R: RemoteFs>(
     let plaintext = match std::fs::read(local) {
         Ok(b) => b,
         Err(e) => {
-            output::err_line(&output::render_failed(
-                &display,
-                &format!("read: {e}"),
-                Some(scope),
-                color,
-            ));
+            output::emit_failed_file(&display, Reason::Usage, &format!("read: {e}"), scope, color);
             summary.record_failure();
             return;
         }
@@ -307,12 +312,7 @@ fn upload_one_compressed<R: RemoteFs>(
     let compressed = match compress(&plaintext, DEFAULT_COMPRESSION_LEVEL) {
         Ok(b) => b,
         Err(e) => {
-            output::err_line(&output::render_failed(
-                &display,
-                &format!("zstd: {e}"),
-                Some(scope),
-                color,
-            ));
+            output::emit_failed_file(&display, Reason::Usage, &format!("zstd: {e}"), scope, color);
             summary.record_failure();
             return;
         }
@@ -323,12 +323,7 @@ fn upload_one_compressed<R: RemoteFs>(
     let parent = local.parent().unwrap_or(Path::new("."));
     let tmp_path = parent.join(format!(".zz-{basename}.zst.tmp"));
     if let Err(e) = std::fs::write(&tmp_path, &compressed) {
-        output::err_line(&output::render_failed(
-            &display,
-            &format!("stage: {e}"),
-            Some(scope),
-            color,
-        ));
+        output::emit_failed_file(&display, Reason::Usage, &format!("stage: {e}"), scope, color);
         summary.record_failure();
         return;
     }
@@ -415,21 +410,26 @@ fn perform_upload<R: RemoteFs>(
 
     match remote.upload(local, &segs, policy) {
         Ok(outcome) => {
-            let size = output::human_size(outcome.size);
-            output::line(&output::render_uploaded(
+            output::emit_uploaded(
                 &outcome.final_name,
-                &size,
+                outcome.size,
                 compression_pct,
                 scope,
                 color,
-            ));
-            if outcome.renamed {
+            );
+            if outcome.renamed && crate::runtime::flags().output == crate::runtime::OutputMode::Text {
                 output::line(&format!("  (renamed from {display})"));
             }
             summary.record_success();
         }
         Err(e) => {
-            output::err_line(&output::render_failed(&display, &format!("{e}"), Some(scope), color));
+            output::emit_failed_file(
+                &display,
+                Reason::ProviderError,
+                &format!("{e}"),
+                scope,
+                color,
+            );
             summary.record_failure();
         }
     }

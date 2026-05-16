@@ -3,7 +3,11 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use zz_drop_core::scriptable::Reason;
+
+use crate::commands::EXIT_USAGE;
 use crate::output;
+use crate::runtime::{self, OutputMode};
 
 /// Name of the TUI binary on PATH. It is shipped as `zz-tui` by the
 /// `zz-drop-tui` crate's `[[bin]]` entry; on Windows it lives next to
@@ -17,7 +21,21 @@ pub const EXIT_TUI_NOT_FOUND: i32 = 127;
 /// Resolve `zz-tui` on PATH and run it, propagating its exit code.
 /// Prints a one-line diagnostic and returns 127 when the binary is
 /// missing, or when launching it fails for any other reason.
+///
+/// In scriptable modes (`--json` / `--quiet`) the TUI cannot run,
+/// so the command fails fast with `interactive_only` and exit
+/// `EXIT_USAGE` without ever attempting to launch `zz-tui`.
 pub fn run() -> i32 {
+    if matches!(
+        runtime::flags().output,
+        OutputMode::Json | OutputMode::Quiet
+    ) {
+        output::emit_failed_bare(
+            Reason::InteractiveOnly,
+            Some("`zz c` opens the configuration TUI and has no scriptable surface"),
+        );
+        return EXIT_USAGE;
+    }
     run_with_env(env::var_os("PATH").as_deref())
 }
 

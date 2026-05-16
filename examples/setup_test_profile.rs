@@ -5,10 +5,15 @@
 //! Usage:
 //!   ZZ_DROP_PASS='!' cargo run --release --example setup_test_profile -- \
 //!     <server_url> <username> <app_password> <remote_root> <alias>
+//!
+//! When `ZZ_CONFIG_DIR=<root>` is set (absolute path), the
+//! container lands at `<root>/config/profiles-local.zz` instead
+//! of the user's real config dir — useful for E2E smoke tests
+//! against a throwaway account.
 
 use std::time::SystemTime;
 
-use zz_drop_core::config::{PathOverrides, discover_paths};
+use zz_drop_core::config::{config_root_from_env, discover_paths};
 use zz_drop_core::profile::format::save_set_zz;
 use zz_drop_core::providers::nextcloud::types::{NextcloudAuth, NextcloudProfile};
 use zz_drop_core::{
@@ -49,7 +54,15 @@ fn main() {
     };
     let set = ProfileSet::with_profile(profile);
 
-    let paths = discover_paths(0, &PathOverrides::default()).expect("discover_paths");
+    let overrides = config_root_from_env(|k| std::env::var(k).ok())
+        .expect("ZZ_CONFIG_DIR is invalid")
+        .unwrap_or_default();
+    let paths = discover_paths(0, &overrides).expect("discover_paths");
+    // Make sure the directory exists when ZZ_CONFIG_DIR points
+    // at a fresh tempdir.
+    if let Some(parent) = paths.profiles_local_file.parent() {
+        std::fs::create_dir_all(parent).expect("mkdir config dir");
+    }
     let path = paths.profiles_local_file;
 
     save_set_zz(&set, &pass, &path).expect("save_set_zz");

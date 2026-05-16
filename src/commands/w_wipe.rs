@@ -1,14 +1,30 @@
 use std::io::{IsTerminal, Write};
 
 use zz_drop_core::config::Paths;
+use zz_drop_core::scriptable::Reason;
 
 use crate::agent::AgentClient;
 use crate::commands::{EXIT_OK, EXIT_USAGE, EXIT_WIPE_CANCELLED};
 use crate::output;
+use crate::runtime::{self, OutputMode};
 
 pub fn run(paths: &Paths) -> i32 {
-    if !confirm_wipe() {
-        output::err_line("wipe cancelled");
+    let mode = runtime::flags().output;
+    let yes = runtime::flags().yes;
+
+    // Scriptable modes must never prompt. Require an explicit
+    // `--yes` (or the legacy `ZZ_DROP_CONFIRM_WIPE=yes` env, kept
+    // for compat) to proceed; otherwise emit `interactive_required`.
+    if matches!(mode, OutputMode::Json | OutputMode::Quiet) && !yes && !legacy_env_yes() {
+        output::emit_failed_bare(
+            Reason::InteractiveRequired,
+            Some("`zz w` is destructive — pass `--yes` to confirm in scriptable mode"),
+        );
+        return EXIT_USAGE;
+    }
+
+    if !confirm_wipe(yes) {
+        output::emit_failed_bare(Reason::WipeCancelled, None);
         return EXIT_WIPE_CANCELLED;
     }
 
@@ -35,17 +51,24 @@ pub fn run(paths: &Paths) -> i32 {
     let _ = std::fs::remove_dir(&paths.config_dir);
 
     if errors.is_empty() {
-        output::line("wiped");
+        output::emit_wiped();
         EXIT_OK
     } else {
         for e in &errors {
-            output::err_line(e);
+            output::emit_failed_bare(Reason::Usage, Some(e));
         }
         EXIT_USAGE
     }
 }
 
-fn confirm_wipe() -> bool {
+fn legacy_env_yes() -> bool {
+    std::env::var("ZZ_DROP_CONFIRM_WIPE").as_deref() == Ok("yes")
+}
+
+fn confirm_wipe(yes_flag: bool) -> bool {
+    if yes_flag || legacy_env_yes() {
+        return true;
+    }
     if std::io::stdin().is_terminal() {
         eprint!("type \"wipe\" to confirm: ");
         let _ = std::io::stderr().flush();
@@ -55,7 +78,7 @@ fn confirm_wipe() -> bool {
         }
         buf.trim() == "wipe"
     } else {
-        std::env::var("ZZ_DROP_CONFIRM_WIPE").as_deref() == Ok("yes")
+        false
     }
 }
 

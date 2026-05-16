@@ -50,6 +50,42 @@ This repository's contribution to the project's security posture:
   passphrase you can remember; the only way back from a lost one
   is `zz w` and a fresh setup.
 
+## Scriptable mode and the passphrase file
+
+`zz z --passphrase-file <path>` (or the matching
+`ZZ_PASSPHRASE_FILE` env var) is the only supported way to feed
+the profile passphrase to a script. The reader applies these
+checks on every invocation; any one of them refuses the file:
+
+- the path must resolve to a **regular file** — symlinks,
+  directories, FIFOs, sockets and devices are rejected without
+  following them
+- the file owner must equal the current process UID — a file
+  owned by root or any other user is refused even when the
+  current process has read permission
+- file mode must be `≤ 0600` (group and others bits must be 0);
+  `0400` is also accepted
+- file size capped at 4 KiB
+- content must be valid UTF-8 with no embedded NUL byte; exactly
+  one trailing `\n` is stripped, anything else (leading spaces,
+  embedded newlines) is preserved verbatim
+
+Permission / ownership failures exit with code `11` and emit
+`failed reason=passphrase_file_permissions` in `--json` mode.
+Other failures (missing file, too large, NUL inside) exit `2`.
+
+What is **explicitly not supported**, by design:
+
+- `ZZ_PASSPHRASE=<value>` — env values leak via
+  `/proc/<pid>/environ`, `ps eww`, container debug snapshots
+- `--passphrase-stdin` — deferred; revisit only if a real
+  vault-piped flow surfaces
+
+In scriptable mode (`--json` / `--quiet`) zz-drop **never** auto-
+unlocks. A daily command against a locked agent fails with
+`reason=agent_locked` (exit `10`) — the script must call
+`zz z --passphrase-file <path>` explicitly first.
+
 ## Pre-alpha hardening pass
 
 A v1 hardening pass against the project's internal checklist

@@ -139,12 +139,13 @@ Every change must consider:
 - release/install impact
 - cross-crate ripple inside this workspace
 
-Public surfaces frozen at v1 (G1):
+Public surfaces frozen at v1.0:
 
 - command grammar
 - exit code table (`pub const EXIT_*`)
-- `--json` NDJSON event schema (`v:"1"`) when scriptable mode
-  ships — see `docs/scriptable.md` once landed
+- `--json` NDJSON event schema (`v:"1"`) — see
+  `docs/scriptable.md` and the JSON Schema file
+  `docs/scriptable/zz-drop-output.v1.json`
 - `profile.zz` envelope and payload schema
 - agent protocol semantics
 
@@ -153,6 +154,14 @@ are breaking and need a major bump.
 
 A change is incomplete if it changes behavior without updating
 the relevant docs/spec/tests in the same patch.
+
+## Scriptable surface
+
+Every CLI verb works under `--json` and `--quiet`. Results go
+through `output::emit_*` (not raw `line` / `err_line`); failures
+carry a `scriptable::Reason` and a matching `EXIT_*`; new verbs
+add a row in `tests/scriptable_universal.rs`. Full contract:
+`docs/scriptable.md`.
 
 ## Security rules
 

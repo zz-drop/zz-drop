@@ -25,6 +25,7 @@ use zz_drop_core::config::Paths;
 use crate::agent::{AgentClient, lock};
 use crate::config;
 use crate::output;
+use crate::runtime::{self, OutputMode};
 use crate::sacs::state::{SacsState, classify, detect_signals_from_paths, remote_feature_compiled_in};
 
 use super::EXIT_OK;
@@ -33,10 +34,20 @@ pub fn run() -> i32 {
     let paths = match config::discover() {
         Ok(p) => p,
         Err(e) => {
-            output::err_line(&format!("could not resolve paths: {e}"));
+            output::emit_failed_bare(
+                zz_drop_core::scriptable::Reason::Usage,
+                Some(&format!("could not resolve paths: {e}")),
+            );
             return super::EXIT_USAGE;
         }
     };
+
+    if matches!(
+        runtime::flags().output,
+        OutputMode::Json | OutputMode::Quiet
+    ) {
+        return run_scriptable(&paths);
+    }
 
     output::line("zz-drop doctor");
     output::line("==============");
@@ -47,6 +58,93 @@ pub fn run() -> i32 {
     section_sacs(&paths, agent_unlocked);
     section_build();
 
+    EXIT_OK
+}
+
+/// Structured doctor for `--json` / `--quiet`. One `doctor_check`
+/// per probe, terminated by `doctor_summary`. Probes are
+/// read-only and tolerate failures: every probe ends up in the
+/// stream either way, so consumers can grep on `name`.
+fn run_scriptable(paths: &Paths) -> i32 {
+    let mut failed: Vec<&'static str> = Vec::new();
+
+    // ---- container presence ----------------------------------
+    let local_present = paths.profiles_local_file.exists();
+    output::emit_doctor_check("container_local", local_present, None);
+    let remote_present = paths.profiles_remote_file.exists();
+    output::emit_doctor_check("container_remote", remote_present, None);
+    if !local_present && !remote_present {
+        // Not strictly a failure — `zz c` hasn't run yet — but
+        // surface it so scripts can branch on the boolean.
+        // We do NOT add to `failed` because absence of a
+        // container is a legitimate starting state.
+    }
+
+    // ---- agent socket + status -------------------------------
+    let socket_present = paths.agent_socket.exists();
+    output::emit_doctor_check("agent_socket", socket_present, None);
+
+    let unlocked_probe: Option<bool> = if socket_present {
+        match AgentClient::connect(&paths.agent_socket, &paths.token_file) {
+            Ok(mut client) => match client.status() {
+                Ok(AgentResponse::Status { unlocked, .. }) => {
+                    output::emit_doctor_check("agent_unlocked", unlocked, None);
+                    Some(unlocked)
+                }
+                Ok(_) => {
+                    output::emit_doctor_check(
+                        "agent_unlocked",
+                        false,
+                        Some("unexpected status response"),
+                    );
+                    failed.push("agent_unlocked");
+                    None
+                }
+                Err(e) => {
+                    let msg = format!("rpc: {e}");
+                    output::emit_doctor_check("agent_unlocked", false, Some(&msg));
+                    failed.push("agent_unlocked");
+                    None
+                }
+            },
+            Err(e) => {
+                let msg = format!("connect: {e}");
+                output::emit_doctor_check("agent_unlocked", false, Some(&msg));
+                failed.push("agent_unlocked");
+                None
+            }
+        }
+    } else {
+        output::emit_doctor_check("agent_unlocked", false, Some("no socket"));
+        None
+    };
+
+    // ---- SACS classification ---------------------------------
+    let mut signals = detect_signals_from_paths(
+        &paths.profiles_local_file,
+        &paths.profiles_remote_file,
+        &paths.agent_socket,
+    );
+    signals.agent_unlocked = unlocked_probe;
+    let state = classify(&signals);
+    let state_name = match state {
+        SacsState::S0Fresh => "S0",
+        SacsState::S1Down => "S1",
+        SacsState::S2Locked => "S2",
+        SacsState::S3Ready => "S3",
+        SacsState::S4ReadyDual => "S4",
+    };
+    let ready = matches!(state, SacsState::S3Ready | SacsState::S4ReadyDual);
+    output::emit_doctor_check("sacs_state", ready, Some(state_name));
+
+    // ---- build identity --------------------------------------
+    match lock::current_build_id() {
+        Some(id) => output::emit_doctor_check("build_id", true, Some(&id)),
+        None => output::emit_doctor_check("build_id", false, Some("unavailable")),
+    }
+
+    let ok = failed.is_empty();
+    output::emit_doctor_summary(ok, failed);
     EXIT_OK
 }
 

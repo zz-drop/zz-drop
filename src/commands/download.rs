@@ -2,12 +2,14 @@ use std::path::{Path, PathBuf};
 
 use zz_drop_core::PlainProfile;
 use zz_drop_core::crypto::compression::{decompress, is_tar_ustar, is_zstd_magic};
+use zz_drop_core::scriptable::Reason;
 
 use super::batch::BatchSummary;
 use super::remote_fs::{RemoteError, RemoteFs};
 use super::walk::{SkipReason, split_user_path};
 use crate::color::ColorPolicy;
 use crate::output::{self, TargetLabel};
+use crate::runtime::{self, OutputMode};
 
 const ZSTD_SUFFIX: &str = ".zst";
 /// Suffix appended to the decompressed sibling file when the
@@ -42,12 +44,7 @@ pub fn run_download<R: RemoteFs>(
         if has_glob(f) {
             match expand_remote_glob(remote, f) {
                 Ok(matches) if matches.is_empty() => {
-                    output::err_line(&output::render_failed(
-                        f,
-                        "no remote matches",
-                        Some(scope),
-                        color,
-                    ));
+                    output::emit_failed_file(f, Reason::ProviderError, "no remote matches", scope, color);
                     summary.record_failure();
                 }
                 Ok(matches) => {
@@ -64,12 +61,7 @@ pub fn run_download<R: RemoteFs>(
                     }
                 }
                 Err(e) => {
-                    output::err_line(&output::render_failed(
-                        f,
-                        &format!("{e}"),
-                        Some(scope),
-                        color,
-                    ));
+                    output::emit_failed_file(f, Reason::ProviderError, &format!("{e}"), scope, color);
                     summary.record_failure();
                 }
             }
@@ -86,7 +78,7 @@ pub fn run_download<R: RemoteFs>(
         }
     }
 
-    summary.exit_code()
+    summary.emit_and_exit_code()
 }
 
 /// True when the argument carries glob metacharacters supported
@@ -164,9 +156,12 @@ pub fn run_download_all<R: RemoteFs>(
         // bundle-upload story; the v1 take is "use `dx <name>`
         // per file" since tar bundles are an obvious
         // single-blob shape. Refuse with a hint.
-        output::err_line(
-            "`x` on `da` / `dar` (bulk decompress) is coming in v1.1 — \
-             for now use `dx <name>` per file, or drop the `x`.",
+        output::emit_failed_bare(
+            Reason::NotImplemented,
+            Some(
+                "`x` on `da` / `dar` (bulk decompress) is planned for a later release — \
+                 for now use `dx <name>` per file, or drop the `x`.",
+            ),
         );
         return crate::commands::EXIT_NOT_IMPLEMENTED;
     }
@@ -191,7 +186,7 @@ pub fn run_download_all<R: RemoteFs>(
     };
     download_dir(remote, &segments, dest_dir, recursive, scope, color, &mut summary);
 
-    summary.exit_code()
+    summary.emit_and_exit_code()
 }
 
 fn download_one<R: RemoteFs>(
@@ -206,12 +201,12 @@ fn download_one<R: RemoteFs>(
     let segments = match split_user_path(arg) {
         Ok(s) => s,
         Err(SkipReason::Dotfile) => {
-            output::err_line(&output::render_failed(arg, "dotfile", Some(scope), color));
+            output::emit_failed_file(arg, Reason::Usage, "dotfile", scope, color);
             summary.record_skip();
             return;
         }
         Err(_) => {
-            output::err_line(&output::render_failed(arg, "invalid path", Some(scope), color));
+            output::emit_failed_file(arg, Reason::Usage, "invalid path", scope, color);
             summary.record_failure();
             return;
         }
@@ -223,15 +218,14 @@ fn download_one<R: RemoteFs>(
     let segs: Vec<&str> = segments.iter().map(|s| s.as_str()).collect();
     match remote.download(&segs, &dest) {
         Ok(size) => {
-            let s = output::human_size(size);
-            output::line(&output::render_downloaded(&basename, &s, scope, color));
+            output::emit_downloaded(&basename, size, scope, color);
             summary.record_success();
             if decompress_flag {
                 decompress_alongside(&dest, scope, color);
             }
         }
         Err(e) => {
-            output::err_line(&output::render_failed(arg, &format!("{e}"), Some(scope), color));
+            output::emit_failed_file(arg, Reason::ProviderError, &format!("{e}"), scope, color);
             summary.record_failure();
         }
     }
@@ -249,31 +243,35 @@ fn decompress_alongside(blob: &Path, scope: TargetLabel<'_>, color: &ColorPolicy
     let bytes = match std::fs::read(blob) {
         Ok(b) => b,
         Err(e) => {
-            output::err_line(&output::render_failed(
+            output::emit_failed_file(
                 &display,
+                Reason::Usage,
                 &format!("read for decompress: {e}"),
-                Some(scope),
+                scope,
                 color,
-            ));
+            );
             return;
         }
     };
     if !is_zstd_magic(&bytes) {
-        output::err_line(&format!(
-            "  · {} is not zstd-compressed; skipped decompress",
-            blob.display()
-        ));
+        if runtime::flags().output == OutputMode::Text {
+            output::err_line(&format!(
+                "  · {} is not zstd-compressed; skipped decompress",
+                blob.display()
+            ));
+        }
         return;
     }
     let decoded = match decompress(&bytes) {
         Ok(d) => d,
         Err(e) => {
-            output::err_line(&output::render_failed(
+            output::emit_failed_file(
                 &display,
+                Reason::Usage,
                 &format!("zstd decode: {e}"),
-                Some(scope),
+                scope,
                 color,
-            ));
+            );
             return;
         }
     };
@@ -288,19 +286,22 @@ fn decompress_alongside(blob: &Path, scope: TargetLabel<'_>, color: &ColorPolicy
 
     let out_path = decompressed_sibling_path(blob);
     if let Err(e) = std::fs::write(&out_path, &decoded) {
-        output::err_line(&output::render_failed(
+        output::emit_failed_file(
             &display,
+            Reason::Usage,
             &format!("write {}: {e}", out_path.display()),
-            Some(scope),
+            scope,
             color,
-        ));
+        );
         return;
     }
-    output::line(&format!(
-        "  · decompressed to {} ({} bytes)",
-        out_path.display(),
-        decoded.len()
-    ));
+    if runtime::flags().output == OutputMode::Text {
+        output::line(&format!(
+            "  · decompressed to {} ({} bytes)",
+            out_path.display(),
+            decoded.len()
+        ));
+    }
 }
 
 /// `<name>.tar.zst` → extract into a sibling directory `<name>/`.
@@ -327,35 +328,49 @@ fn extract_tar_alongside(
         .unwrap_or_else(|| Path::new("."))
         .join(stem);
     if dest.exists() {
-        output::err_line(&format!(
-            "  · refusing to extract: {} already exists",
-            dest.display()
-        ));
+        if runtime::flags().output == OutputMode::Text {
+            output::err_line(&format!(
+                "  · refusing to extract: {} already exists",
+                dest.display()
+            ));
+        } else {
+            output::emit_failed_file(
+                &display,
+                Reason::Usage,
+                &format!("refusing to extract: {} already exists", dest.display()),
+                scope,
+                color,
+            );
+        }
         return;
     }
     if let Err(e) = std::fs::create_dir(&dest) {
-        output::err_line(&output::render_failed(
+        output::emit_failed_file(
             &display,
+            Reason::Usage,
             &format!("mkdir {}: {e}", dest.display()),
-            Some(scope),
+            scope,
             color,
-        ));
+        );
         return;
     }
     let mut archive = tar::Archive::new(tar_bytes);
     if let Err(e) = archive.unpack(&dest) {
-        output::err_line(&output::render_failed(
+        output::emit_failed_file(
             &display,
+            Reason::Usage,
             &format!("untar into {}: {e}", dest.display()),
-            Some(scope),
+            scope,
             color,
-        ));
+        );
         return;
     }
-    output::line(&format!(
-        "  · extracted bundle into {}/",
-        dest.display()
-    ));
+    if runtime::flags().output == OutputMode::Text {
+        output::line(&format!(
+            "  · extracted bundle into {}/",
+            dest.display()
+        ));
+    }
 }
 
 /// `file.md.zst` → `file.md`; `archive.tar.zst` → `archive.tar`
@@ -395,17 +410,20 @@ fn download_dir<R: RemoteFs>(
             } else {
                 remote_segments.join("/")
             };
-            output::err_line(&output::render_failed(&display, &format!("{e}"), Some(scope), color));
+            output::emit_failed_file(&display, Reason::ProviderError, &format!("{e}"), scope, color);
             summary.record_failure();
             return;
         }
     };
 
     if let Err(e) = std::fs::create_dir_all(local_dir) {
-        output::err_line(&format!(
-            "could not create local dir {}: {e}",
-            local_dir.display()
-        ));
+        output::emit_failed_bare(
+            Reason::Usage,
+            Some(&format!(
+                "could not create local dir {}: {e}",
+                local_dir.display()
+            )),
+        );
         summary.record_failure();
         return;
     }
@@ -432,16 +450,14 @@ fn download_dir<R: RemoteFs>(
             full.push(entry.name.clone());
             let full_refs: Vec<&str> = full.iter().map(|s| s.as_str()).collect();
             let dest = local_dir.join(&entry.name);
+            let display = full.join("/");
             match remote.download(&full_refs, &dest) {
                 Ok(size) => {
-                    let s = output::human_size(size);
-                    let display = full.join("/");
-                    output::line(&output::render_downloaded(&display, &s, scope, color));
+                    output::emit_downloaded(&display, size, scope, color);
                     summary.record_success();
                 }
                 Err(e) => {
-                    let display = full.join("/");
-                    output::err_line(&output::render_failed(&display, &format!("{e}"), Some(scope), color));
+                    output::emit_failed_file(&display, Reason::ProviderError, &format!("{e}"), scope, color);
                     summary.record_failure();
                 }
             }

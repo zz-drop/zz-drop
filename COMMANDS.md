@@ -265,6 +265,52 @@ is also produced by the binary:
 zz --help          # static cheat sheet (or zz -h)
 ```
 
+## Scripting
+
+`zz` has a stable scriptable contract for CI and shell scripts:
+
+```sh
+# JSON mode — one NDJSON record per result on stdout.
+zz s artifact.zip --json
+zz d 'reports/*.pdf' --json | jq -r 'select(.event=="downloaded") | .file'
+
+# Quiet mode — one terse text line per result, no ANSI.
+zz s notes.md --quiet
+```
+
+The minimum viable CI pattern (passphrase from a file, no
+prompts, no auto-unlock):
+
+```sh
+export ZZ_OUTPUT=json
+export ZZ_PASSPHRASE_FILE=/run/secrets/zz.pass
+export ZZ_ALIAS=ci-bot
+
+zz z                       # unlock once
+trap 'zz q' EXIT           # always lock on exit
+zz s artifact.zip          # upload
+```
+
+Three things to know up front:
+
+1. **No auto-unlock in `--json` / `--quiet`.** If the agent is
+   locked when a daily command runs, the failure is
+   `reason=agent_locked` with exit code `10` — fix by calling
+   `zz z` first.
+2. **Destructive verbs need `--yes`.** `zz w` rejects with
+   `interactive_required` unless `--yes` (or
+   `ZZ_DROP_CONFIRM_WIPE=yes`) is set.
+3. **The TUI is not scriptable.** `zz c` exits `2` with
+   `interactive_only` under `--json` / `--quiet`.
+
+Full contract — flags, env vars, NDJSON event schema, exit
+code table, CI cookbook, stability guarantees:
+[`docs/scriptable.md`](docs/scriptable.md).
+
+Worked examples by verb (single file, bulk, recursive, glob,
+bundle, decompress, doctor):
+[`docs/usage.md`](docs/usage.md).
+
 ## Cross-references
 
 - [`README.md`](README.md) — install, status, security headlines.
@@ -273,3 +319,5 @@ zz --help          # static cheat sheet (or zz -h)
 - [`docs/agent.md`](docs/agent.md) — local agent: lifecycle, socket auth.
 - [`docs/sacs.md`](docs/sacs.md) — shell completion: states, ranking, NDJSON schema.
 - [`docs/commands.md`](docs/commands.md) — short canonical pointer for the spec table.
+- [`docs/scriptable.md`](docs/scriptable.md) — full `--json` / `--quiet` contract.
+- [`docs/usage.md`](docs/usage.md) — worked examples for every verb.

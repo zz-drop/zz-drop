@@ -7,8 +7,10 @@ pub mod config;
 pub mod crypto;
 pub mod diag_log;
 pub mod errors;
+pub mod output;
 pub mod profile;
 pub mod providers;
+pub mod scriptable;
 pub mod sidecars;
 
 pub use agent_proto::{AgentError, AgentRequest, AgentResponse, PROTOCOL_VERSION};

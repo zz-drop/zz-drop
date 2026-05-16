@@ -76,6 +76,46 @@ pub struct PathOverrides {
     pub runtime_dir: Option<PathBuf>,
 }
 
+/// `ZZ_CONFIG_DIR` lets an operator (typically CI) redirect the
+/// **entire** zz-drop state tree under a single root. Layout:
+///
+/// ```text
+/// <root>/config   → profiles, config.toml, sidecars
+/// <root>/cache    → zz-drop.log + future cache state
+/// <root>/runtime  → agent socket + token
+/// ```
+///
+/// `lookup` returns the env value or `None` for unset. The
+/// closure injection mirrors `runtime::merge_env`: it keeps unit
+/// tests off the racy process-global env mutators.
+///
+/// Returns `Ok(None)` when the variable is unset or empty (caller
+/// uses OS defaults), `Ok(Some(_))` with three populated fields
+/// when set to an absolute path, or `Err(_)` when the value is
+/// present but rejected (relative path).
+pub fn config_root_from_env<F>(lookup: F) -> Result<Option<PathOverrides>, PathError>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let Some(s) = lookup("ZZ_CONFIG_DIR") else {
+        return Ok(None);
+    };
+    if s.is_empty() {
+        return Ok(None);
+    }
+    let root = PathBuf::from(&s);
+    if !root.is_absolute() {
+        return Err(PathError::Io(format!(
+            "ZZ_CONFIG_DIR=`{s}` must be an absolute path"
+        )));
+    }
+    Ok(Some(PathOverrides {
+        config_dir: Some(root.join("config")),
+        cache_dir: Some(root.join("cache")),
+        runtime_dir: Some(root.join("runtime")),
+    }))
+}
+
 #[derive(Debug, Error)]
 pub enum PathError {
     #[error("could not resolve home directory for the current user")]
@@ -279,5 +319,71 @@ mod tests {
         ensure_dir(&target, 0o700).unwrap();
         let mode = std::fs::metadata(&target).unwrap().permissions().mode();
         assert_eq!(mode & 0o777, 0o700);
+    }
+
+    // ---- ZZ_CONFIG_DIR ------------------------------------------------
+
+    fn env_pair(key: &'static str, value: Option<&'static str>) -> impl Fn(&str) -> Option<String> {
+        move |k| if k == key { value.map(|s| s.to_string()) } else { None }
+    }
+
+    #[test]
+    fn zz_config_dir_unset_returns_none() {
+        let res = config_root_from_env(|_| None).unwrap();
+        assert!(res.is_none());
+    }
+
+    #[test]
+    fn zz_config_dir_empty_returns_none() {
+        let res = config_root_from_env(env_pair("ZZ_CONFIG_DIR", Some(""))).unwrap();
+        assert!(res.is_none());
+    }
+
+    #[test]
+    fn zz_config_dir_absolute_root_populates_all_three_fields() {
+        let res = config_root_from_env(env_pair("ZZ_CONFIG_DIR", Some("/opt/zz-drop")))
+            .unwrap()
+            .unwrap();
+        assert_eq!(res.config_dir.as_deref(), Some(std::path::Path::new("/opt/zz-drop/config")));
+        assert_eq!(res.cache_dir.as_deref(), Some(std::path::Path::new("/opt/zz-drop/cache")));
+        assert_eq!(res.runtime_dir.as_deref(), Some(std::path::Path::new("/opt/zz-drop/runtime")));
+    }
+
+    #[test]
+    fn zz_config_dir_relative_is_rejected() {
+        let err = config_root_from_env(env_pair("ZZ_CONFIG_DIR", Some("relative/path"))).unwrap_err();
+        match err {
+            PathError::Io(msg) => assert!(
+                msg.contains("absolute"),
+                "expected absolute-path complaint, got: {msg}"
+            ),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn zz_config_dir_then_discover_paths_layers_layout() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        let root_str = root.to_str().unwrap().to_string();
+        let overrides = config_root_from_env(move |k| {
+            if k == "ZZ_CONFIG_DIR" {
+                Some(root_str.clone())
+            } else {
+                None
+            }
+        })
+        .unwrap()
+        .unwrap();
+        let paths = discover_paths(4242, &overrides).unwrap();
+        assert_eq!(paths.config_dir, root.join("config"));
+        assert_eq!(paths.cache_dir, root.join("cache"));
+        assert_eq!(paths.runtime_dir, root.join("runtime"));
+        assert_eq!(
+            paths.profiles_local_file,
+            root.join("config").join("profiles-local.zz")
+        );
+        assert_eq!(paths.agent_socket, root.join("runtime").join("agent.sock"));
+        assert_eq!(paths.debug_log_file(), root.join("cache").join("zz-drop.log"));
     }
 }

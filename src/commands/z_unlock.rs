@@ -28,6 +28,7 @@ use std::time::Duration;
 use zz_drop_core::AgentResponse;
 use zz_drop_core::config::Paths;
 use zz_drop_core::diag_log;
+use zz_drop_core::scriptable::Reason;
 use zz_drop_core::{
     POLICY_V1, ProfileCryptoError, ProfileKek, ProfileSet, decrypt_set, rotate_set_if_needed,
 };
@@ -35,18 +36,24 @@ use zz_drop_core::{
 use crate::agent::{AGENT_MODE_ENV, AgentClient, ClientError};
 use crate::cli::ContainerSource;
 use crate::commands::{
-    EXIT_AGENT_UNREACHABLE, EXIT_DECRYPT_FAILED, EXIT_OK, EXIT_PROFILE_MISSING, EXIT_USAGE,
+    EXIT_AGENT_UNREACHABLE, EXIT_DECRYPT_FAILED, EXIT_OK, EXIT_PASSPHRASE_FILE_INSECURE,
+    EXIT_PROFILE_MISSING, EXIT_USAGE,
 };
 #[cfg(not(feature = "remote"))]
 use crate::commands::EXIT_NOT_IMPLEMENTED;
 use crate::output;
+use crate::passphrase as pp;
 use crate::picker::{PickError, pick_alias};
+use crate::runtime::{self, OutputMode};
 use zz_drop_core::sidecars;
 
 const UNLOCK_TTL_SECS: u64 = 600;
 
 pub fn run(paths: &Paths, which: Option<ContainerSource>) -> i32 {
-    let resolved = match which {
+    // Container source precedence: explicit positional (`zz z
+    // local|remote`) → global flag/env (`--local`/`--remote`/
+    // `ZZ_CONTAINER`) → automatic discovery.
+    let resolved = match which.or(runtime::flags().container) {
         Some(s) => s,
         None => match resolve_default_source(paths) {
             Ok(s) => s,
@@ -57,6 +64,113 @@ pub fn run(paths: &Paths, which: Option<ContainerSource>) -> i32 {
     match resolved {
         ContainerSource::Local => unlock_local(paths),
         ContainerSource::Remote => unlock_remote(paths),
+    }
+}
+
+/// Whether the current invocation is in a scriptable mode where
+/// interactive prompts and ambiguity resolution are forbidden.
+fn scriptable() -> bool {
+    matches!(
+        runtime::flags().output,
+        OutputMode::Json | OutputMode::Quiet
+    )
+}
+
+/// Read the passphrase: from `--passphrase-file`/`ZZ_PASSPHRASE_FILE`
+/// when supplied, otherwise prompt interactively. In scriptable
+/// mode a missing flag is a hard error — we never prompt under
+/// `--json`/`--quiet`.
+fn obtain_passphrase(label: &str) -> Result<String, i32> {
+    if let Some(path) = runtime::flags().passphrase_file.clone() {
+        let uid = crate::config::current_uid();
+        match pp::read_passphrase_file(&path, uid) {
+            Ok(s) => return Ok(s),
+            Err(e) => {
+                let exit = if e.is_insecure() {
+                    EXIT_PASSPHRASE_FILE_INSECURE
+                } else {
+                    EXIT_USAGE
+                };
+                let reason = if e.is_insecure() {
+                    Reason::PassphraseFilePermissions
+                } else {
+                    Reason::Usage
+                };
+                output::emit_failed_bare(reason, Some(&format!("{e}")));
+                return Err(exit);
+            }
+        }
+    }
+
+    if scriptable() {
+        output::emit_failed_bare(
+            Reason::InteractiveRequired,
+            Some(
+                "passphrase prompt would block in scriptable mode — \
+                 pass `--passphrase-file <path>` or set ZZ_PASSPHRASE_FILE",
+            ),
+        );
+        return Err(EXIT_USAGE);
+    }
+
+    match prompt_passphrase(label) {
+        Ok(p) => Ok(p),
+        Err(e) => {
+            output::emit_failed_bare(Reason::Usage, Some(&format!("could not read passphrase: {e}")));
+            Err(EXIT_USAGE)
+        }
+    }
+}
+
+/// Pick the active alias from the container's alias list. In
+/// scriptable mode the picker never runs: we honour the
+/// `--alias`/`ZZ_ALIAS` override first, then the sidecar cache,
+/// then the single-alias short-circuit, and finally fail with
+/// `alias_ambiguous` carrying the candidate set.
+fn choose_alias(aliases: &[&str], cached_alias: Option<&str>) -> Result<String, i32> {
+    if scriptable() {
+        if let Some(flag) = runtime::flags().alias.as_deref() {
+            if aliases.iter().any(|a| *a == flag) {
+                return Ok(flag.to_string());
+            }
+            // The operator named an alias that doesn't exist in
+            // this container. Surface it the same way as
+            // alias_ambiguous so scripts get a single failure
+            // shape to handle.
+            output::emit_failed_alias_ambiguous(aliases.to_vec());
+            return Err(EXIT_USAGE);
+        }
+        if let Some(c) = cached_alias {
+            return Ok(c.to_string());
+        }
+        if aliases.len() == 1 {
+            return Ok(aliases[0].to_string());
+        }
+        output::emit_failed_alias_ambiguous(aliases.to_vec());
+        return Err(EXIT_USAGE);
+    }
+
+    match pick_alias(aliases, cached_alias) {
+        Ok(a) => Ok(a),
+        Err(PickError::EmptyList) => {
+            output::emit_failed_bare(Reason::DecryptFailed, Some("profile container is empty"));
+            Err(EXIT_DECRYPT_FAILED)
+        }
+        Err(PickError::NotInteractive) => {
+            output::emit_failed_bare(
+                Reason::InteractiveRequired,
+                Some("no cached default and stdin is not a terminal"),
+            );
+            Err(EXIT_USAGE)
+        }
+        Err(PickError::InvalidIndex) => {
+            output::emit_failed_bare(Reason::Usage, Some("invalid selection"));
+            Err(EXIT_USAGE)
+        }
+        Err(PickError::Stdin) => {
+            output::emit_failed_bare(Reason::Usage, Some("could not read selection"));
+            Err(EXIT_USAGE)
+        }
     }
 }
 
@@ -217,25 +331,39 @@ fn unlock_remote(paths: &Paths) -> i32 {
     }
 }
 
-/// Pick local vs remote when the operator ran `zz z` with no args.
+/// Pick local vs remote when the operator ran `zz z` with no args
+/// and supplied no `--local`/`--remote`/`ZZ_CONTAINER` override.
 fn resolve_default_source(paths: &Paths) -> Result<ContainerSource, i32> {
     let local_present = paths.profiles_local_file.exists();
     let remote_present = paths.profiles_remote_file.exists();
 
     match (local_present, remote_present) {
         (false, false) => {
-            output::err_line(&format!(
-                "no profile container at {} or {}; run `zz c` to configure one",
-                paths.profiles_local_file.display(),
-                paths.profiles_remote_file.display()
-            ));
+            output::emit_failed_bare(
+                Reason::ProfileMissing,
+                Some(&format!(
+                    "no profile container at {} or {}; run `zz c` to configure one",
+                    paths.profiles_local_file.display(),
+                    paths.profiles_remote_file.display()
+                )),
+            );
             Err(EXIT_PROFILE_MISSING)
         }
         (true, false) => Ok(ContainerSource::Local),
         (false, true) => Ok(ContainerSource::Remote),
         (true, true) => {
-            // Both exist. Pick the one that has a cached default in
-            // its sidecar; if neither does, default to local.
+            // Both exist. In scriptable mode the operator must
+            // pick explicitly — silently defaulting to local in
+            // a script would mask user intent.
+            if scriptable() {
+                output::emit_failed_bare(
+                    Reason::ContainerAmbiguous,
+                    Some("two containers present — pass `--local` or `--remote`"),
+                );
+                return Err(EXIT_USAGE);
+            }
+            // Interactive: prefer whichever sidecar carries a
+            // cached default, else fall back to local.
             let local_has_default =
                 sidecars::read_local_default(&paths.last_default_local_file).is_ok();
             let remote_has_default =
@@ -251,17 +379,23 @@ fn resolve_default_source(paths: &Paths) -> Result<ContainerSource, i32> {
 
 fn unlock_local(paths: &Paths) -> i32 {
     if !paths.profiles_local_file.exists() {
-        output::err_line(&format!(
-            "no local container at {}; run `zz c` to configure one",
-            paths.profiles_local_file.display()
-        ));
+        output::emit_failed_bare(
+            Reason::ProfileMissing,
+            Some(&format!(
+                "no local container at {}; run `zz c` to configure one",
+                paths.profiles_local_file.display()
+            )),
+        );
         return EXIT_PROFILE_MISSING;
     }
 
     let envelope = match std::fs::read_to_string(&paths.profiles_local_file) {
         Ok(s) => s,
         Err(e) => {
-            output::err_line(&format!("could not read profile container: {e}"));
+            output::emit_failed_bare(
+                Reason::ProfileMissing,
+                Some(&format!("could not read profile container: {e}")),
+            );
             diag_log::log(&format!(
                 "unlock_local read_err path={} err={e}",
                 paths.profiles_local_file.display()
@@ -290,20 +424,19 @@ fn unlock_local(paths: &Paths) -> i32 {
         .and_then(|n| n.to_str())
         .unwrap_or("profiles-local.zz")
         .to_string();
-    let passphrase = match prompt_passphrase(&label) {
+    let passphrase = match obtain_passphrase(&label) {
         Ok(p) => p,
-        Err(e) => {
-            output::err_line(&format!("could not read passphrase: {e}"));
-            diag_log::log(&format!("unlock_local prompt_err err={e}"));
-            return EXIT_USAGE;
-        }
+        Err(code) => return code,
     };
     diag_log::log(&format!("unlock_local prompt pass_len={}", passphrase.len()));
 
     let (profile_set, kek) = match decrypt_set(&envelope, &passphrase) {
         Ok(pair) => pair,
         Err(ProfileCryptoError::Aead) => {
-            output::err_line("decryption failed (wrong passphrase or corrupted container)");
+            output::emit_failed_bare(
+                Reason::DecryptFailed,
+                Some("decryption failed (wrong passphrase or corrupted container)"),
+            );
             diag_log::log(&format!(
                 "unlock_local decrypt_fail kind=Aead envelope_fnv={envelope_fnv:016x} pass_len={}",
                 passphrase.len()
@@ -311,14 +444,17 @@ fn unlock_local(paths: &Paths) -> i32 {
             return EXIT_DECRYPT_FAILED;
         }
         Err(ProfileCryptoError::LegacyFormat) => {
-            output::err_line(
-                "legacy single-profile blob detected (no migration in dev): run `zz w` and re-set up",
+            output::emit_failed_bare(
+                Reason::DecryptFailed,
+                Some(
+                    "legacy single-profile blob detected — no in-place migration; run `zz w` and re-set up",
+                ),
             );
             diag_log::log("unlock_local decrypt_fail kind=Legacy");
             return EXIT_DECRYPT_FAILED;
         }
         Err(e) => {
-            output::err_line(&format!("decryption failed: {e}"));
+            output::emit_failed_bare(Reason::DecryptFailed, Some(&format!("decryption failed: {e}")));
             diag_log::log(&format!("unlock_local decrypt_fail kind=other detail={e}"));
             return EXIT_DECRYPT_FAILED;
         }
@@ -350,7 +486,10 @@ fn unlock_local(paths: &Paths) -> i32 {
     );
 
     if profile_set.is_empty() {
-        output::err_line("profile container is empty; run `zz c` to add a profile");
+        output::emit_failed_bare(
+            Reason::DecryptFailed,
+            Some("profile container is empty; run `zz c` to add a profile"),
+        );
         return EXIT_DECRYPT_FAILED;
     }
 
@@ -363,26 +502,9 @@ fn unlock_local(paths: &Paths) -> i32 {
         .filter(|a| profile_set.contains_alias(a));
     let aliases: Vec<&str> = profile_set.aliases();
 
-    let active_alias = match pick_alias(&aliases, cached_alias) {
+    let active_alias = match choose_alias(&aliases, cached_alias) {
         Ok(a) => a,
-        Err(PickError::EmptyList) => {
-            output::err_line("profile container is empty; run `zz c` to add a profile");
-            return EXIT_DECRYPT_FAILED;
-        }
-        Err(PickError::NotInteractive) => {
-            output::err_line(
-                "no cached default and stdin is not a terminal; run `zz z local` interactively first",
-            );
-            return EXIT_USAGE;
-        }
-        Err(PickError::InvalidIndex) => {
-            output::err_line("invalid selection");
-            return EXIT_USAGE;
-        }
-        Err(PickError::Stdin) => {
-            output::err_line("could not read selection");
-            return EXIT_USAGE;
-        }
+        Err(code) => return code,
     };
 
     let active_profile = profile_set
@@ -404,12 +526,18 @@ fn unlock_local(paths: &Paths) -> i32 {
     if !paths.agent_socket.exists() {
         diag_log::log("unlock_local agent spawn");
         if let Err(e) = spawn_agent() {
-            output::err_line(&format!("could not start agent: {e}"));
+            output::emit_failed_bare(
+                Reason::AgentUnreachable,
+                Some(&format!("could not start agent: {e}")),
+            );
             diag_log::log(&format!("unlock_local agent spawn_err err={e}"));
             return EXIT_AGENT_UNREACHABLE;
         }
         if !wait_for_socket(&paths.agent_socket, Duration::from_secs(2)) {
-            output::err_line("agent did not come up in time");
+            output::emit_failed_bare(
+                Reason::AgentUnreachable,
+                Some("agent did not come up in time"),
+            );
             diag_log::log("unlock_local agent wait_socket_timeout");
             return EXIT_AGENT_UNREACHABLE;
         }
@@ -418,7 +546,10 @@ fn unlock_local(paths: &Paths) -> i32 {
     let mut client = match AgentClient::connect(&paths.agent_socket, &paths.token_file) {
         Ok(c) => c,
         Err(e) => {
-            output::err_line(&format!("could not connect to agent: {e}"));
+            output::emit_failed_bare(
+                Reason::AgentUnreachable,
+                Some(&format!("could not connect to agent: {e}")),
+            );
             diag_log::log(&format!("unlock_local agent connect_err err={e}"));
             return EXIT_AGENT_UNREACHABLE;
         }
@@ -432,24 +563,30 @@ fn unlock_local(paths: &Paths) -> i32 {
                 &paths.last_default_local_file,
                 &active_alias,
             );
-            output::line(&format!("unlocked · {active_alias} · {target}"));
+            output::emit_unlocked(&active_alias, &target);
             diag_log::log(&format!(
                 "unlock_local agent_ok alias={active_alias}"
             ));
             EXIT_OK
         }
         Ok(other) => {
-            output::err_line(&format!("unexpected agent response: {other:?}"));
+            output::emit_failed_bare(
+                Reason::AgentUnreachable,
+                Some(&format!("unexpected agent response: {other:?}")),
+            );
             diag_log::log(&format!("unlock_local agent_unexpected resp={other:?}"));
             EXIT_AGENT_UNREACHABLE
         }
         Err(ClientError::HandshakeFailed) => {
-            output::err_line("agent handshake failed (token mismatch)");
+            output::emit_failed_bare(
+                Reason::AgentUnreachable,
+                Some("agent handshake failed (token mismatch)"),
+            );
             diag_log::log("unlock_local agent_handshake_fail");
             EXIT_AGENT_UNREACHABLE
         }
         Err(e) => {
-            output::err_line(&format!("agent error: {e}"));
+            output::emit_failed_bare(Reason::AgentUnreachable, Some(&format!("agent error: {e}")));
             diag_log::log(&format!("unlock_local agent_err {e}"));
             EXIT_AGENT_UNREACHABLE
         }

@@ -1,4 +1,5 @@
 use crate::commands::{EXIT_OK, EXIT_PROVIDER_ERROR};
+use crate::output;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BatchSummary {
@@ -30,6 +31,17 @@ impl BatchSummary {
         } else {
             EXIT_OK
         }
+    }
+
+    /// Convenience for command runners: emit a `batch_summary`
+    /// record (JSON mode only — text/quiet stay quiet on this) and
+    /// return the exit code in one step. Skipped files are not
+    /// counted in `total`/`ok`/`failed` because skips aren't
+    /// attempts — they're a parser-level decision.
+    pub fn emit_and_exit_code(&self) -> i32 {
+        let exit = self.exit_code();
+        output::emit_batch_summary(self.total_attempted(), self.successes, self.failures, exit);
+        exit
     }
 }
 

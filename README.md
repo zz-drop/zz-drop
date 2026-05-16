@@ -122,6 +122,27 @@ Use the TUI to:
 
 The TUI is **setup-only**. Daily file moves stay in the CLI.
 
+## Scripting
+
+`zz` is scriptable. NDJSON on stdout, stable schema, no prompts,
+no auto-unlock:
+
+```sh
+export ZZ_OUTPUT=json
+export ZZ_PASSPHRASE_FILE=/run/secrets/zz.pass
+
+zz z                        # unlock once
+zz s artifact.zip           # upload
+zz d 'reports/*.pdf' | jq -r 'select(.event=="downloaded").file'
+```
+
+Exit codes are stable, `reason` strings on `failed` records map
+1:1 to them, and the full event schema lives in
+[`docs/scriptable.md`](docs/scriptable.md) plus the JSON Schema
+file at
+[`docs/scriptable/zz-drop-output.v1.json`](docs/scriptable/zz-drop-output.v1.json).
+`--quiet` is also available for terse human-readable output.
+
 ## Scope (v1)
 
 In: explicit one-shot upload / download, one configured cloud
@@ -137,6 +158,10 @@ roadmap](https://github.com/zz-drop).
 
 - [`COMMANDS.md`](COMMANDS.md) — every command, examples,
   exit codes, parser rule
+- [`docs/usage.md`](docs/usage.md) — worked examples for every
+  verb, including scriptable mode patterns
+- [`docs/scriptable.md`](docs/scriptable.md) — full `--json` /
+  `--quiet` contract: NDJSON schema, reason table, CI cookbook
 - [`SECURITY.md`](SECURITY.md) — threat model, server-side
   guarantees and non-claims, supported crypto
 - [`docs/build.md`](docs/build.md) — build from source, BYO
