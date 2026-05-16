@@ -11,8 +11,8 @@ name: Patch brew formula
 # The `zz` shorthand symlink is NOT injected here — it is
 # declared in `dist-workspace.toml` as `bin-aliases = { "zz-drop"
 # = ["zz"] }`. cargo-dist propagates it to both the curl shell
-# installer (drops a symlink in CARGO_HOME/bin) and the brew
-# formula (populates `BINARY_ALIASES` and runs
+# installer (drops a symlink in `install-path`, i.e. `~/.local/bin`)
+# and the brew formula (populates `BINARY_ALIASES` and runs
 # `install_binary_aliases!` inside `def install`). Cellar-tracked,
 # brew-uninstall-clean.
 #
