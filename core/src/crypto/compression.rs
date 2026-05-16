@@ -21,11 +21,16 @@ use std::io;
 /// pipelines without metadata exchange.
 pub const ZSTD_MAGIC: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
 
-/// Tar `ustar\0` magic at offset 257 inside an archive's first
-/// 512-byte header block. After zstd-decoding a `.tar.zst`
-/// payload the caller checks this to decide whether to feed
-/// the bytes to a tar extractor.
+/// POSIX `ustar\0` magic at offset 257 inside an archive's
+/// first 512-byte header block.
 pub const TAR_USTAR_MAGIC: &[u8; 6] = b"ustar\0";
+
+/// GNU tar magic — same offset 257, but the trailing NUL is a
+/// space and the version field is `' '` `\0`. Modern GNU tar
+/// and the Rust `tar` crate's default header write this variant.
+/// The bytes at 257..263 are `u s t a r SPACE` for GNU vs.
+/// `u s t a r NUL` for strict POSIX.
+pub const TAR_USTAR_MAGIC_GNU: &[u8; 6] = b"ustar ";
 
 /// File-size cutoff below which the `x` modifier skips zstd on
 /// upload. Matches the v1 design freeze (4 KiB).
@@ -41,12 +46,20 @@ pub fn is_zstd_magic(bytes: &[u8]) -> bool {
 }
 
 /// Returns `true` when `bytes` looks like the first 512 bytes of
-/// a tar archive (`ustar\0` at offset 257). Used to chain
-/// "decompress → extract" inside `zz dx <archive>.tar.zst`.
+/// a tar archive. Accepts both POSIX (`ustar\0`) and GNU
+/// (`ustar `) magic at offset 257 — the Rust `tar` crate's
+/// default header is GNU, so a strict POSIX-only check would
+/// silently skip extraction of bundles produced by our own
+/// upload path. Used to chain "decompress → extract" inside
+/// `zz dx <archive>.tar.zst`.
 pub fn is_tar_ustar(bytes: &[u8]) -> bool {
     const OFFSET: usize = 257;
-    bytes.len() >= OFFSET + TAR_USTAR_MAGIC.len()
-        && &bytes[OFFSET..OFFSET + TAR_USTAR_MAGIC.len()] == TAR_USTAR_MAGIC
+    const LEN: usize = 6;
+    if bytes.len() < OFFSET + LEN {
+        return false;
+    }
+    let window = &bytes[OFFSET..OFFSET + LEN];
+    window == TAR_USTAR_MAGIC || window == TAR_USTAR_MAGIC_GNU
 }
 
 /// Compress `plaintext` into a `Vec<u8>` using zstd at the
@@ -97,6 +110,25 @@ mod tests {
         // Truncated buffer: even if the magic appears in the
         // bytes we hold, an undersized header doesn't qualify.
         assert!(!is_tar_ustar(&buf[..200]));
+    }
+
+    #[test]
+    fn tar_gnu_magic_also_detected() {
+        // Regression guard: the Rust `tar` crate's default
+        // writer emits the GNU variant (`ustar `, with a space
+        // instead of NUL at byte 5). A strict POSIX-only check
+        // would silently skip extraction of bundles produced by
+        // our own `zz sax` / `zz sarx` path.
+        let mut buf = vec![0u8; 257];
+        buf.extend_from_slice(TAR_USTAR_MAGIC_GNU);
+        buf.resize(512, 0);
+        assert!(is_tar_ustar(&buf), "GNU `ustar ` magic must be accepted");
+
+        // Anything else at that slot is not a tar.
+        let mut other = vec![0u8; 257];
+        other.extend_from_slice(b"abcdef");
+        other.resize(512, 0);
+        assert!(!is_tar_ustar(&other));
     }
 
     #[test]
