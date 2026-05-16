@@ -18,10 +18,10 @@ pub use config::{
 pub use crypto::Argon2idConfig;
 pub use errors::CoreError;
 pub use profile::{
-    PROFILE_SET_SCHEMA_V2, PROFILE_VERSION_V1, PlainProfile, ProfileCryptoError, ProfileKek,
-    ProfileSet, ProfileSettings, decrypt_profile, decrypt_set, encrypt_profile,
+    POLICY_V1, PROFILE_SET_SCHEMA_V2, PROFILE_VERSION_V1, PlainProfile, ProfileCryptoError,
+    ProfileKek, ProfileSet, ProfileSettings, decrypt_profile, decrypt_set, encrypt_profile,
     encrypt_profile_with_config, encrypt_set, encrypt_set_with_config, encrypt_set_with_kek,
-    load_set_zz, save_set_zz, save_set_zz_with_config,
+    load_set_zz, needs_rotation, rotate_set_if_needed, save_set_zz, save_set_zz_with_config,
 };
 pub use providers::dropbox::{DropboxAuth, DropboxProfile};
 pub use providers::google_drive::{GoogleDriveAuth, GoogleDriveProfile};

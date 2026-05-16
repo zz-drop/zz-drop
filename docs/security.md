@@ -22,6 +22,13 @@ process running under your UID.
   per envelope; the AEAD nonce is 24 random bytes per encrypt —
   re-encrypting the container after appending an inner profile or
   refreshing an OAuth token always uses a fresh nonce.
+- **KDF rotation**: when zz-drop raises the Argon2id baseline in a
+  future release, your container is **auto-upgraded** on the next
+  unlock — one extra Argon2id derive that one time, then back to
+  normal. Stronger-than-baseline containers are never downgraded.
+  Rotation never asks you anything and never fails the unlock; if
+  the write step fails it just retries next time. See
+  [profile-format.md → KDF rotation](profile-format.md#kdf-rotation).
 - The KEK is held by the agent in `Zeroizing<[u8; 32]>` and zeroed
   on lock / TTL expiry / process exit.
 - The decrypted container lives only in the **local agent's RAM**,

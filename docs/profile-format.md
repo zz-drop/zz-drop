@@ -85,6 +85,34 @@ caches it between operations within a session.
 - KDF parameters stored in envelope.
 - No recovery if profile decrypt passphrase is lost.
 
+## KDF rotation
+
+The envelope stores the Argon2id parameters that were used to
+derive the key. When a future zz-drop release raises the policy
+baseline (`POLICY_V1` in `core/src/profile/policy.rs`), every
+container created under the old, weaker parameters is
+auto-upgraded on the next successful unlock:
+
+1. The CLI decrypts with the envelope's stored params (one
+   Argon2id derive).
+2. If any stored param is below `POLICY_V1`, it re-derives with
+   the policy params and a fresh salt, re-encrypts the
+   container, and atomically replaces the on-disk file
+   (`<path>.tmp` + `rename`).
+3. The post-rotation `ProfileKek` is what the agent receives —
+   subsequent inner mutations (`encrypt_set_with_kek`) write the
+   new params back to disk.
+4. Failures are non-fatal: the unlock already succeeded, so the
+   operator continues with the old KEK and rotation retries on
+   the next unlock.
+
+For v1.0.0 the policy equals `Argon2idConfig::DEFAULT`, so no
+container will rotate at first release. The mechanism exists so a
+future v1.x can bump the floor without leaving v1.0 profiles
+stuck on weaker parameters.
+
+Stronger-than-policy containers are never downgraded.
+
 ## Profile passphrase
 
 - minimum technical length: 1 character

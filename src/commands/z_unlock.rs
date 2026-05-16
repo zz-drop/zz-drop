@@ -28,7 +28,9 @@ use std::time::Duration;
 use zz_drop_core::AgentResponse;
 use zz_drop_core::config::Paths;
 use zz_drop_core::diag_log;
-use zz_drop_core::{ProfileCryptoError, decrypt_set};
+use zz_drop_core::{
+    POLICY_V1, ProfileCryptoError, ProfileKek, ProfileSet, decrypt_set, rotate_set_if_needed,
+};
 
 use crate::agent::{AGENT_MODE_ENV, AgentClient, ClientError};
 use crate::cli::ContainerSource;
@@ -123,6 +125,13 @@ fn unlock_remote(paths: &Paths) -> i32 {
             return EXIT_DECRYPT_FAILED;
         }
     };
+
+    let kek = maybe_rotate_kek(
+        &profile_set,
+        kek,
+        &passphrase,
+        &paths.profiles_remote_file,
+    );
 
     if profile_set.is_empty() {
         output::err_line("remote profile container is empty");
@@ -333,6 +342,13 @@ fn unlock_local(paths: &Paths) -> i32 {
         diag_log::fnv64(kek.salt()),
     ));
 
+    let kek = maybe_rotate_kek(
+        &profile_set,
+        kek,
+        &passphrase,
+        &paths.profiles_local_file,
+    );
+
     if profile_set.is_empty() {
         output::err_line("profile container is empty; run `zz c` to add a profile");
         return EXIT_DECRYPT_FAILED;
@@ -442,6 +458,40 @@ fn unlock_local(paths: &Paths) -> i32 {
 
 fn prompt_passphrase(label: &str) -> std::io::Result<String> {
     rpassword::prompt_password(&format!("profile passphrase ({label}): "))
+}
+
+/// Re-encrypt the container with current policy params if the
+/// on-disk envelope used weaker ones, returning the post-rotation
+/// `ProfileKek` for the agent handoff. Failures here are non-fatal:
+/// the operator's unlock is already valid, so we log a warning and
+/// fall back to the existing KEK — rotation retries on the next
+/// unlock.
+fn maybe_rotate_kek(
+    profile_set: &ProfileSet,
+    kek: ProfileKek,
+    passphrase: &str,
+    path: &Path,
+) -> ProfileKek {
+    match rotate_set_if_needed(profile_set, &kek, passphrase, path, &POLICY_V1) {
+        Ok(Some(new_kek)) => {
+            output::line("unlock: rotated KDF parameters to v1 policy");
+            diag_log::log(&format!(
+                "unlock rotate_ok kdf_m={} kdf_t={} kdf_p={}",
+                new_kek.kdf_config().memory_kib,
+                new_kek.kdf_config().iterations,
+                new_kek.kdf_config().parallelism,
+            ));
+            new_kek
+        }
+        Ok(None) => kek,
+        Err(e) => {
+            output::err_line(&format!(
+                "unlock: KDF rotation skipped: {e} (will retry on next unlock)"
+            ));
+            diag_log::log(&format!("unlock rotate_skip err={e}"));
+            kek
+        }
+    }
 }
 
 fn spawn_agent() -> std::io::Result<()> {
