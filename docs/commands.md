@@ -1,9 +1,32 @@
 # zz-drop CLI commands
 
 Canonical command table for the `zz` binary. The user-facing
-manual with examples lives in
+manual with worked examples and output samples lives in
 [`zz-drop/COMMANDS.md`](../COMMANDS.md); this page is
 the spec.
+
+## Quick reference
+
+```text
+zz <file>...                       upload (default verb)
+zz s <file>... [<remote-dir>/]     upload, optional remote subdir
+zz sx <file> [<remote-dir>/]       upload, compressed
+zz sa <dir> [<remote-prefix>]      upload top-level files
+zz sar <dir> [<remote-prefix>]     upload recursively
+zz sax <dir> [<remote-prefix>]     upload as one .tar.zst bundle
+zz sarx <dir> [<remote-prefix>]    upload recursively as one .tar.zst
+
+zz d <file>... [<local-dir>/]      download (raw bytes)
+zz dx <file>.zst [<local-dir>/]    download + decompress (or extract bundle)
+zz da [<local-dest> [<remote/>]]   download all top-level files
+zz dar [<local-dest> [<remote/>]]  download all files recursively
+
+zz z                unlock the local container into the agent
+zz q                lock the agent
+zz w                wipe local zz-drop state (with confirmation)
+zz c                launch the configuration TUI (zz-tui)
+zz f                doctor / diagnostics
+```
 
 ## Reserved verbs
 

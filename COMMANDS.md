@@ -1,34 +1,14 @@
 # zz-drop commands (v1)
 
-Complete reference for the `zz` CLI binary. The grammar is
-deliberately terse — single-letter verbs that compose with
-single-letter modifiers — so daily use stays under your left
-hand. The shorter list at
-[`docs/commands.md`](docs/commands.md) is a tracking pointer
-for spec drift; this file is the user-facing manual.
+User-facing manual for the `zz` CLI binary, with worked examples
+and output samples. The grammar is deliberately terse —
+single-letter verbs that compose with single-letter modifiers —
+so daily use stays under your left hand.
 
-## At a glance
-
-```text
-zz <file>...                       upload (default verb)
-zz s <file>... [<remote-dir>/]     upload, optional remote subdir
-zz sx <file> [<remote-dir>/]       upload, compressed
-zz sa <dir> [<remote-prefix>]      upload top-level files
-zz sar <dir> [<remote-prefix>]     upload recursively
-zz sax <dir> [<remote-prefix>]     upload as one .tar.zst bundle
-zz sarx <dir> [<remote-prefix>]    upload recursively as one .tar.zst
-
-zz d <file>... [<local-dir>/]      download (raw bytes)
-zz dx <file>.zst [<local-dir>/]    download + decompress (or extract bundle)
-zz da [<local-dest> [<remote/>]]   download all top-level files
-zz dar [<local-dest> [<remote/>]]  download all files recursively
-
-zz z                unlock the local container into the agent
-zz q                lock the agent
-zz w                wipe local zz-drop state (with confirmation)
-zz c                launch the configuration TUI (zz-tui)
-zz f                doctor / diagnostics
-```
+**Looking for the verb-table spec?** The canonical grammar
+reference (reserved verbs, modifier semantics, parser rule,
+exit codes) lives at [`docs/commands.md`](docs/commands.md).
+This file builds on top of it with prose and concrete examples.
 
 ## Verbs
 
@@ -318,6 +298,6 @@ bundle, decompress, doctor):
 - [`docs/security.md`](docs/security.md) — threat model, what the server sees / does not see.
 - [`docs/agent.md`](docs/agent.md) — local agent: lifecycle, socket auth.
 - [`docs/sacs.md`](docs/sacs.md) — shell completion: states, ranking, NDJSON schema.
-- [`docs/commands.md`](docs/commands.md) — short canonical pointer for the spec table.
+- [`docs/commands.md`](docs/commands.md) — canonical grammar spec: reserved verbs, modifier semantics, parser rule.
 - [`docs/scriptable.md`](docs/scriptable.md) — full `--json` / `--quiet` contract.
 - [`docs/usage.md`](docs/usage.md) — worked examples for every verb.

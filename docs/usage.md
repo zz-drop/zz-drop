@@ -199,9 +199,7 @@ After this, daily commands don't ask again until the agent's
 TTL expires or `q` is called.
 
 ```sh
-zz z                              # auto: local or remote, picker if both
-zz z local                        # force local container
-zz z remote                       # force remote container (feature-gated)
+zz z                              # unlocks profiles-local.zz, picker if multi-alias
 ```
 
 When the container holds more than one alias, the picker
