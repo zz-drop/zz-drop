@@ -1,7 +1,12 @@
+<p align="center">
+  <img src=".github/assets/logo.png" width="180" alt="zz-drop logo">
+</p>
+
 # zz-drop
 
 [![build](https://github.com/zz-drop/zz-drop/actions/workflows/build.yml/badge.svg)](https://github.com/zz-drop/zz-drop/actions/workflows/build.yml)
 [![release](https://img.shields.io/github/v/release/zz-drop/zz-drop?include_prereleases&sort=semver)](https://github.com/zz-drop/zz-drop/releases)
+[![Homebrew tap](https://img.shields.io/badge/Homebrew-tap-orange?logo=homebrew&logoColor=white)](https://github.com/zz-drop/homebrew-zz-drop)
 [![license](https://img.shields.io/badge/license-MIT_OR_Apache--2.0-blue)](#license)
 
 Minimalist CLI to put files into — and get files from — a
@@ -24,14 +29,19 @@ brew install zz-drop/zz-drop/zz-drop
 # Linux & WSL — signed binaries via curl-installer (preferred).
 # Also works on macOS if you prefer no package manager.
 curl -fsSL https://github.com/zz-drop/zz-drop/releases/latest/download/zz-drop-installer.sh | sh
+
+# From source via the Rust toolchain (any OS rustup supports).
+# No `zz` shorthand, no minisign verification — escape valve only.
+cargo install --git https://github.com/zz-drop/zz-drop --locked zz-drop
 ```
 
 No install path needs root.
 
-Every release artifact is signed with [minisign](https://jedisct1.github.io/minisign/);
+Every release artifact from the brew + curl-installer channels is
+signed with [minisign](https://jedisct1.github.io/minisign/);
 the public key is [`release-key.pub`](release-key.pub).
 
-Build from source: see [`docs/build.md`](docs/build.md).
+Build from source with full control: see [`docs/build.md`](docs/build.md).
 
 ## Quickstart
 
@@ -55,11 +65,26 @@ Output always names the active alias and the destination. Sizes
 are binary (`KiB` / `MiB` / `GiB`). Colors only on a TTY, with
 `NO_COLOR` / `CLICOLOR=0` honored.
 
-## What you get
+## Providers
 
-- **Four destinations**: Nextcloud (WebDAV), Google Drive
-  (OAuth device flow), OneDrive (OAuth device flow + Microsoft
-  Graph), Dropbox (OAuth paste-code + PKCE, App folder).
+| Provider | Auth method | Status |
+|---|---|---|
+| **Nextcloud** | WebDAV + App Password or Login Flow v2 | v1 ✓ |
+| **Google Drive** | OAuth device flow, `drive.file` scope | v1 ✓ |
+| **OneDrive** | OAuth device flow, Microsoft Graph | v1 ✓ |
+| **Dropbox** | OAuth paste-code + PKCE, App folder | v1 ✓ |
+| Proton Drive | — | planned v1.1+ |
+
+## How it compares
+
+| Tool | What it does | How zz-drop differs |
+|---|---|---|
+| [`rclone`](https://rclone.org/) | Swiss-army cloud engine — 50+ providers, two-way sync, mount, copy, serve, daemon | rclone is a many-verb daemon with a large config surface; zz-drop is the explicit one-shot transfer counterpart — single destination per profile, no sync, no mount, encrypted profile by default |
+| [`croc`](https://github.com/schollz/croc) | Peer-to-peer ad-hoc transfer between two people via a relay | croc routes through a third-party relay between two parties; zz-drop deposits at your *own* cloud account, no relay |
+| `scp` | SSH file copy to/from a host you have shell access on | scp needs SSH on the far end; zz-drop fronts WebDAV / GDrive / OneDrive / Dropbox — works against managed accounts where you don't have shell |
+
+## What else is in the box
+
 - **Encrypted profile container** (`profile-local.zz`):
   XChaCha20-Poly1305 + Argon2id; passphrase never leaves the
   device. The server side (when used in v2) sees only an
@@ -109,6 +134,23 @@ download-glob wrapper for `zz d 'Q*'`:
 
 The configuration TUI is a separate binary, `zz-tui`, shipped
 in the same release tarball as `zz-drop`. `zz c` exec's it.
+
+A typical Nextcloud setup, three screens of the six-step flow:
+
+<table>
+<tr>
+<td><img src=".github/assets/tui-provider.png" alt="Choose Provider"></td>
+<td><img src=".github/assets/tui-auth.png" alt="Nextcloud authentication"></td>
+<td><img src=".github/assets/tui-probe.png" alt="WebDAV probe verification"></td>
+</tr>
+<tr>
+<td align="center"><sub>1. pick a provider</sub></td>
+<td align="center"><sub>2. authenticate</sub></td>
+<td align="center"><sub>3. verify reachability</sub></td>
+</tr>
+</table>
+
+Full walkthrough:
 
 ![zz-drop TUI walkthrough](.github/assets/tui-demo.gif)
 
