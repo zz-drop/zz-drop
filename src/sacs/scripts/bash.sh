@@ -36,6 +36,24 @@ _zz_complete() {
             COMPREPLY+=("$value")
         fi
     done < <("$bin" __complete "${cmd_args[@]}" 2>/dev/null)
+
+    # Match the zsh script's `compadd -S ''` behaviour: when every
+    # candidate is a directory (value ends with `/`), suppress
+    # bash's auto-appended trailing space so a follow-up TAB can
+    # descend into the directory without a backspace.
+    if [ ${#COMPREPLY[@]} -gt 0 ]; then
+        local _zz_c _zz_all_dirs=1
+        for _zz_c in "${COMPREPLY[@]}"; do
+            case "$_zz_c" in
+                */) ;;
+                *) _zz_all_dirs=0; break ;;
+            esac
+        done
+        if [ $_zz_all_dirs -eq 1 ]; then
+            compopt -o nospace 2>/dev/null
+        fi
+        unset _zz_c _zz_all_dirs
+    fi
 }
 
 complete -F _zz_complete zz
