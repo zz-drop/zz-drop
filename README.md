@@ -79,7 +79,7 @@ are binary (`KiB` / `MiB` / `GiB`). Colors only on a TTY, with
 
 | Tool | What it does | How zz-drop differs |
 |---|---|---|
-| [`rclone`](https://rclone.org/) | Swiss-army cloud engine — 50+ providers, two-way sync, mount, copy, serve, daemon | rclone is a many-verb daemon with a large config surface; zz-drop is the explicit one-shot transfer counterpart — single destination per profile, no sync, no mount, encrypted profile by default |
+| [`rclone`](https://rclone.org/) | Swiss-army cloud engine — 70+ providers, two-way sync, mount, copy, serve, optional daemon mode | rclone is a many-verb CLI with a large config surface; zz-drop is the explicit one-shot transfer counterpart — single destination per profile, no sync, no mount, encrypted profile by default |
 | [`croc`](https://github.com/schollz/croc) | Peer-to-peer ad-hoc transfer between two people via a relay | croc routes through a third-party relay between two parties; zz-drop deposits at your *own* cloud account, no relay |
 | `scp` | SSH file copy to/from a host you have shell access on | scp needs SSH on the far end; zz-drop fronts WebDAV / GDrive / OneDrive / Dropbox — works against managed accounts where you don't have shell |
 
