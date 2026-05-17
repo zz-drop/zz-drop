@@ -126,7 +126,6 @@ If the `e` modifier ever lands, compression will run before encryption — encry
 | `zz saa .` | `saa: modifier a repeated (set semantics — at most once)` |
 | `zz sex file.md` | `sex: encryption (e) is not implemented in v1; v1 supports a, r, x` |
 | `zz sr` / `zz dr x` | `sr: unknown modifier r` (`r` requires `a`) |
-| `zz z foo` | `z takes no arguments` |
 
 Anything that doesn't match a reserved verb is treated as an upload path, so `zz x` uploads a file literally named `x`. Use `./x` if your filename collides with what looks like a verb.
 
