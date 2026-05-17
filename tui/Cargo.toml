@@ -32,7 +32,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 ratatui-image = { version = "10", default-features = false, features = ["crossterm", "image-defaults"] }
 zxcvbn = "3"
 directories = "6"
-getrandom = "0.2"
+getrandom = "0.4"
 rustix = { version = "1", features = ["process"] }
 
 # The `dist` release profile is defined at the workspace root
