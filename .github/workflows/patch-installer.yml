@@ -126,6 +126,18 @@ jobs:
               unset _zz_zshrc _zz_marker _zz_fw _zz_f
           }
 
+          __zz_bash_completion_loaded() {
+              # Returns 0 if the bash-completion framework looks available
+              # at any of the canonical locations across distros + brew.
+              [ -f /usr/share/bash-completion/bash_completion ] && return 0
+              [ -d /etc/bash_completion.d ] && return 0
+              [ -f /etc/profile.d/bash_completion.sh ] && return 0
+              [ -f /etc/bash_completion ] && return 0
+              [ -f "${HOMEBREW_PREFIX:-/opt/homebrew}/etc/bash_completion" ] && return 0
+              [ -f /usr/local/etc/bash_completion ] && return 0
+              return 1
+          }
+
           __zz_install_completions() {
               _zz_bin="${HOME}/.local/bin/zz-drop"
               [ -x "$_zz_bin" ] || _zz_bin="${HOME}/.cargo/bin/zz-drop"
@@ -134,17 +146,27 @@ jobs:
                   return 0
               }
 
+              # bash: install unconditionally regardless of $SHELL. bash is
+              # dominant on Linux/WSL and the XDG path is harmless for users
+              # who don't run bash. Containers, SSH non-login sessions and
+              # cron jobs typically have $SHELL unset — gating on it meant
+              # those bash users got no SACS without manual wiring.
+              _zz_dest="${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/zz-drop"
+              mkdir -p "$(dirname "$_zz_dest")" 2>/dev/null
+              "$_zz_bin" --completions bash > "$_zz_dest" 2>/dev/null && {
+                  echo "  bash completion → $_zz_dest"
+                  if ! __zz_bash_completion_loaded; then
+                      echo "  → bash-completion framework not detected; install via your"
+                      echo "    package manager for auto-loading (apt / dnf / pacman / apk"
+                      echo "    install bash-completion). Or source the file manually:"
+                      echo "      source $_zz_dest"
+                  fi
+              }
+
+              # zsh / fish: location depends on user dotfile config, so we
+              # still gate on $SHELL — running these for users who do not
+              # invoke that shell would drop files in unexpected places.
               case "$(basename "${SHELL:-}")" in
-                  bash)
-                      _zz_dest="${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/zz-drop"
-                      mkdir -p "$(dirname "$_zz_dest")" 2>/dev/null
-                      "$_zz_bin" --completions bash > "$_zz_dest" 2>/dev/null && {
-                          echo "  bash completion → $_zz_dest"
-                          echo "  → if not auto-loaded, source the framework:"
-                          echo "      Linux: source /usr/share/bash-completion/bash_completion"
-                          echo "      macOS (brew): source \$(brew --prefix)/etc/bash_completion"
-                      }
-                      ;;
                   zsh)
                       _zz_dest="${ZDOTDIR:-$HOME}/.zfunc/_zz"
                       mkdir -p "$(dirname "$_zz_dest")" 2>/dev/null
@@ -160,11 +182,11 @@ jobs:
                           echo "  fish completion → $_zz_dest (auto-loaded)"
                       }
                       ;;
-                  "")
-                      echo "  completion: \$SHELL not set; skip"
+                  ""|bash)
+                      # bash already handled above; empty $SHELL just falls through.
                       ;;
                   *)
-                      echo "  completion: shell '$SHELL' not auto-supported"
+                      echo "  completion: extra shell '$SHELL' not auto-supported"
                       echo "  → manual: $_zz_bin --completions {bash|zsh|fish} > <path>"
                       ;;
               esac

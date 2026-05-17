@@ -16,11 +16,21 @@ manual `--completions` step required.
   completions for bash / zsh / fish into the standard cellar
   paths (`share/{bash-completion/completions,zsh/site-functions,
   fish/vendor_completions.d}`). `brew uninstall` reverses them.
-- **`curl | sh` installer** — detects `$SHELL`, writes the
-  matching completion file to the canonical XDG path, and prints
-  any extra one-time setup the operator needs (e.g. `fpath+=…`
-  for zsh). Falls through gracefully when `$SHELL` is unset
-  (containers, scripts) or set to a shell SACS doesn't speak.
+- **`curl | sh` installer** — writes the bash completion file to
+  `${XDG_DATA_HOME:-~/.local/share}/bash-completion/completions/zz-drop`
+  **unconditionally**, regardless of `$SHELL`. bash is dominant on
+  Linux / WSL and the XDG path is harmless for non-bash users, so
+  containers, cron jobs and SSH non-login sessions (where `$SHELL`
+  is often unset) get SACS without a manual wiring step. If the
+  bash-completion framework isn't detected on the system, the
+  installer prints the one-line fix (`apt / dnf / pacman / apk
+  install bash-completion`, or source the file directly).
+
+  zsh and fish completion files are installed only when `$SHELL`
+  points at the matching shell — their target paths depend on
+  user dotfile config (`ZDOTDIR`, fish completions dir), so
+  dropping the file for users who don't run that shell would
+  land it in an unexpected place.
 
 The auto-installed paths per shell:
 
