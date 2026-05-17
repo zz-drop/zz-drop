@@ -1,0 +1,63 @@
+name: CodeQL
+
+# Static analysis on every push to main and every PR targeting main,
+# plus a weekly safety net at 05:17 UTC Mondays (catches CVEs that
+# land in dependencies between commits). Action versions verified
+# 2026-05-17 via `gh release list -R github/codeql-action`:
+#  - github/codeql-action @v4 (4.35.5, 2026-05-15)
+#  - actions/checkout    @v6 (6.0.2, 2026-01-09)
+# CodeQL bundle v2.25.4 includes Rust queries (codeql/rust-queries).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  security-events: write
+  actions: read
+  contents: read
+  packages: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Rust analysis — build-mode `none` (no `cargo build`
+          # needed; CodeQL extracts the database from sources).
+          # Matches the bevyengine/bevy pattern for Rust projects.
+          - language: rust
+            build-mode: none
+          # Scan the GitHub Actions workflows themselves —
+          # cheap, catches script-injection / unpinned-action
+          # smells inside this very `.github/workflows/` tree.
+          - language: actions
+            build-mode: none
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # `security-extended` adds higher-precision security
+          # queries to the default suite. No `security-and-quality`
+          # — keeps the alert volume focused on actionable findings.
+          queries: security-extended
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
