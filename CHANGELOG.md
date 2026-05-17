@@ -13,6 +13,45 @@ surfaces frozen on the road to 1.0 are listed in
 
 ## [Unreleased]
 
+## [0.9.2] — 2026-05-17
+
+Polish release ahead of the 1.0 freeze. No new public surface,
+no breaking changes.
+
+### Fixed
+
+- **bash completion: no trailing space on directory candidates**
+  — `zz s et<TAB>` now resolves to `zz s etc/` with the cursor
+  positioned for the next path segment, instead of `zz s etc/ `
+  with a trailing space that forced a backspace before typing
+  the inner filename. The bash script now sets `compopt -o
+  nospace` whenever every candidate in `COMPREPLY` ends with
+  `/`, matching the zsh script's `compadd -S ''` behaviour.
+
+### Changed
+
+- **`curl | sh` installer auto-wires bash completion regardless
+  of `$SHELL`** — the previous logic gated on `$SHELL`, so
+  containers, cron jobs and SSH non-login sessions where
+  `$SHELL` is unset got no bash completion installed. The
+  installer now writes
+  `${XDG_DATA_HOME:-~/.local/share}/bash-completion/completions/zz-drop`
+  unconditionally (bash is dominant on Linux/WSL, the XDG path
+  is harmless for non-bash users). If the bash-completion
+  framework isn't detected on the system, the installer prints
+  a one-line hint pointing at the package manager.
+- **README hero pass.** Project logo added; Homebrew tap badge
+  alongside build / release / license; provider matrix promoted
+  to a proper table with `auth method` + `status` columns; new
+  "How it compares" table vs `rclone` / `croc` / `scp`; three
+  static TUI screenshots above the existing walkthrough GIF;
+  third install one-liner (`cargo install --git ... --locked
+  zz-drop`) under a "from source via Rust toolchain" framing.
+- **`COMMANDS.md` / `docs/commands.md` split.** The
+  user-facing manual (`COMMANDS.md`) and the canonical grammar
+  spec (`docs/commands.md`) no longer duplicate the verb table;
+  the cheatsheet lives in `docs/commands.md` only.
+
 ## [0.9.1] — 2026-05-16
 
 ### Fixed
