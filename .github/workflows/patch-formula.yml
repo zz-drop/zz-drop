@@ -46,7 +46,7 @@ jobs:
           git config --global user.email "release-bot@users.noreply.github.com"
           git clone "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" tap
 
-      - name: Patch formula (SACS completions only)
+      - name: Patch formula (SACS completions + caveats)
         working-directory: tap
         run: |
           set -euo pipefail
@@ -82,19 +82,77 @@ jobs:
               "shells: [:bash, :zsh, :fish])\n"
           )
 
-          if "generate_completions_from_executable" in src:
-              print("nothing to do (completions already wired)")
-              sys.exit(0)
+          completions_done = "generate_completions_from_executable" in src
+          if not completions_done:
+              if anchor not in src:
+                  sys.exit(
+                      f"FATAL: anchor not found in {p}: {anchor!r}. "
+                      "cargo-dist install block format may have changed."
+                  )
+              src = src.replace(anchor, anchor + insertion, 1)
+              print("patched: SACS completions wired")
+          else:
+              print("completions already wired")
 
-          if anchor not in src:
-              sys.exit(
-                  f"FATAL: anchor not found in {p}: {anchor!r}. "
-                  "cargo-dist install block format may have changed."
+          # `def caveats` — surfaced by `brew install` and
+          # `brew info`. Tells the operator how to make the
+          # shell-completion files (which brew already wrote)
+          # actually load. On Apple Silicon the brew prefix
+          # isn't in zsh's default `fpath` AND a fresh macOS
+          # `.zshrc` typically doesn't call `compinit`, so both
+          # need fixing once for SACS to surface candidates.
+          # Re-running `zz --setup-completions` after that
+          # writes an idempotent block to ~/.zshrc that covers
+          # the same fpath + compinit setup; the caveat exists
+          # because brew, by policy, never touches dotfiles.
+          caveats_done = "def caveats" in src
+          if not caveats_done:
+              # Inject before the final `end` of the formula
+              # class. Brew formulas are always one class, one
+              # trailing `end\n` — anchor on that.
+              end_anchor_line = "end\n"
+              # Find the LAST occurrence (the file ends with it).
+              last = src.rfind(end_anchor_line)
+              if last == -1:
+                  sys.exit("FATAL: formula has no trailing `end`")
+              # Heredoc body is plain text — no Ruby string
+              # interpolation. We could splice in
+              # `\#{HOMEBREW_PREFIX}` to render the absolute brew
+              # path, but bare `brew shellenv` works on both Intel
+              # and Apple Silicon (brew is already on $PATH —
+              # otherwise the operator couldn't have invoked
+              # `brew install`).
+              caveats_block = (
+                  "\n"
+                  "  def caveats\n"
+                  "    <<~EOS\n"
+                  "      Shell completions are installed in the cellar. To make them\n"
+                  "      load in your shell, two one-line setups (each runs once):\n"
+                  "\n"
+                  "        # 1) put brew's completion dirs on $fpath\n"
+                  "        echo 'eval \"$(brew shellenv)\"' >> ~/.zprofile\n"
+                  "\n"
+                  "        # 2) actually load completions in zsh\n"
+                  "        echo 'autoload -Uz compinit && compinit' >> ~/.zshrc\n"
+                  "\n"
+                  "      Open a new terminal, then test with `zz <TAB>`.\n"
+                  "\n"
+                  "      If you'd rather have zz-drop write a delimited block to your\n"
+                  "      rc file in one shot (with framework detection for oh-my-zsh,\n"
+                  "      prezto, zinit, etc.), run:\n"
+                  "\n"
+                  "        zz --setup-completions\n"
+                  "\n"
+                  "      To check the install at any point: `zz --check-completions`.\n"
+                  "    EOS\n"
+                  "  end\n"
               )
+              src = src[:last] + caveats_block + src[last:]
+              print("patched: def caveats added")
+          else:
+              print("caveats already present")
 
-          src = src.replace(anchor, anchor + insertion, 1)
           p.write_text(src)
-          print("patched: SACS completions wired")
           PY
 
       - name: Commit and push
@@ -106,5 +164,5 @@ jobs:
             exit 0
           fi
           git add "${FORMULA}"
-          git commit -m "Wire SACS completions"
+          git commit -m "Wire SACS completions + caveats"
           git push

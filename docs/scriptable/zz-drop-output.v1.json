@@ -22,7 +22,9 @@
         "locked",
         "wiped",
         "doctor_check",
-        "doctor_summary"
+        "doctor_summary",
+        "completions_setup",
+        "completions_status"
       ]
     },
     "ts": {
@@ -40,7 +42,9 @@
     { "$ref": "#/$defs/Locked" },
     { "$ref": "#/$defs/Wiped" },
     { "$ref": "#/$defs/DoctorCheck" },
-    { "$ref": "#/$defs/DoctorSummary" }
+    { "$ref": "#/$defs/DoctorSummary" },
+    { "$ref": "#/$defs/CompletionsSetup" },
+    { "$ref": "#/$defs/CompletionsStatus" }
   ],
   "$defs": {
     "Reason": {
@@ -59,7 +63,8 @@
         "interactive_required",
         "interactive_only",
         "alias_ambiguous",
-        "container_ambiguous"
+        "container_ambiguous",
+        "completions_install_failed"
       ]
     },
 
@@ -213,6 +218,66 @@
           "type": "array",
           "items": { "type": "string" }
         }
+      },
+      "additionalProperties": false
+    },
+
+    "Shell": {
+      "type": "string",
+      "enum": ["bash", "zsh", "fish"],
+      "description": "Shells SACS ships completion scripts for in v1."
+    },
+
+    "Framework": {
+      "type": "string",
+      "enum": ["none", "oh-my-zsh", "prezto", "zinit", "antibody", "antidote", "znap", "zimfw", "zplug"],
+      "description": "Known zsh plugin framework detected via grep against the rc file. 'none' for plain zsh or any non-zsh shell."
+    },
+
+    "CompletionsSetup": {
+      "type": "object",
+      "description": "Outcome of `zz --setup-completions --json`. Idempotent: re-running with identical content emits `completion_action: unchanged` and `rc_action: unchanged`.",
+      "required": ["v", "event", "ts", "shell", "completion_path", "completion_action", "rc_action", "framework"],
+      "properties": {
+        "v": { "const": "1" },
+        "event": { "const": "completions_setup" },
+        "ts": { "type": "string" },
+        "shell": { "$ref": "#/$defs/Shell" },
+        "completion_path": { "type": "string", "description": "Absolute path of the installed completion script file." },
+        "completion_action": {
+          "type": "string",
+          "enum": ["created", "updated", "unchanged"],
+          "description": "What happened to the completion file on disk."
+        },
+        "rc_path": { "type": "string", "description": "Absolute path of the rc file (~/.zshrc or ~/.bashrc). Absent when no rc edit was needed." },
+        "rc_action": {
+          "type": "string",
+          "enum": ["inserted", "updated", "unchanged", "not_needed"],
+          "description": "What happened to the delimited rc-file block. 'not_needed' for fish (auto-loaded) or bash with the bash-completion framework already loaded."
+        },
+        "framework": { "$ref": "#/$defs/Framework" },
+        "hint": { "type": "string", "description": "Optional human hint (e.g. 'open a new terminal'). Absent when no further action is required." }
+      },
+      "additionalProperties": false
+    },
+
+    "CompletionsStatus": {
+      "type": "object",
+      "description": "Read-only status report from `zz --check-completions --json`.",
+      "required": ["v", "event", "ts", "shell", "wired", "status", "completion_path"],
+      "properties": {
+        "v": { "const": "1" },
+        "event": { "const": "completions_status" },
+        "ts": { "type": "string" },
+        "shell": { "$ref": "#/$defs/Shell" },
+        "wired": { "type": "boolean", "description": "true iff a fresh shell session will load SACS." },
+        "status": {
+          "type": "string",
+          "enum": ["wired", "needs_rc_block", "missing"],
+          "description": "Triage label matching the wired flag."
+        },
+        "completion_path": { "type": "string" },
+        "rc_path": { "type": "string", "description": "Absent when no rc edit is relevant (fish, or bash with bash-completion framework already loaded)." }
       },
       "additionalProperties": false
     }

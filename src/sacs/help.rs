@@ -74,10 +74,10 @@ EXIT CODES
   3  not impl      8  wipe cancelled
   5  agent down    9  provider error    127 zz-tui not on PATH
 
-INSTALL COMPLETION
-  zz --completions bash | source                  # bash
-  zz --completions zsh  > ~/.zfunc/_zz            # zsh (add to fpath)
-  zz --completions fish > ~/.config/fish/completions/zz.fish
+SHELL COMPLETIONS
+  zz --setup-completions [bash|zsh|fish]       # install (auto-detects $SHELL)
+  zz --check-completions [bash|zsh|fish]       # verify the install
+  zz --setup-completions zsh --uninstall       # remove rc block + file
 
   See COMMANDS.md for the full grammar reference.
 ";
@@ -115,8 +115,9 @@ EXIT CODES
   6 profile · 7 decrypt · 8 wipe cancel
   9 provider · 127 no zz-tui
 
-INSTALL COMPLETION
-  zz --completions {bash|zsh|fish}
+SHELL COMPLETIONS
+  zz --setup-completions [bash|zsh|fish]
+  zz --check-completions [bash|zsh|fish]
 
 See COMMANDS.md for the full grammar reference.
 ";
@@ -134,7 +135,7 @@ mod tests {
             "ATOMIC",
             "MODIFIERS",
             "EXIT CODES",
-            "INSTALL COMPLETION",
+            "SHELL COMPLETIONS",
         ] {
             assert!(
                 out.contains(header),
@@ -155,13 +156,12 @@ mod tests {
     }
 
     #[test]
-    fn wide_render_documents_every_install_shell() {
+    fn wide_render_documents_setup_and_check_flags() {
         let out = render(80);
+        assert!(out.contains("--setup-completions"));
+        assert!(out.contains("--check-completions"));
         for shell in ["bash", "zsh", "fish"] {
-            assert!(
-                out.contains(&format!("--completions {shell}")),
-                "wide help missing install line for `{shell}`"
-            );
+            assert!(out.contains(shell), "wide help missing shell `{shell}`");
         }
     }
 

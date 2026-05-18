@@ -31,6 +31,8 @@ impl WelcomeScreen {
         server_label: &str,
         local_exists: bool,
         remote_exists: bool,
+        completions_status: Option<&zz_drop_core::completions::Status>,
+        completions_message: Option<&str>,
     ) {
         // Layout: tagline · LOCAL block · separator · REMOTE block ·
         // separator · Quit. Each block has a section header (1 row),
@@ -41,10 +43,13 @@ impl WelcomeScreen {
         let local_rows: u16 = 1 + (local_exists as u16) + 1; // header + (open?) + create
         #[cfg(feature = "remote")]
         let remote_rows: u16 = 1 + (remote_exists as u16) + 2; // header + (open?) + create-remote + signin
+        // SetupCompletions block: one row, plus separator above it.
+        let completions_rows: u16 = 1 + 1; // sep + SetupCompletions
         #[cfg(feature = "remote")]
-        let row_count: u16 = local_rows + 1 + remote_rows + 1 + 1; // + sep(local→remote) + sep(remote→quit) + Quit
+        let row_count: u16 =
+            local_rows + 1 + remote_rows + completions_rows + 1 + 1; // + sep(local→remote) + sep(remote→completions) + sep(completions→quit) + Quit
         #[cfg(not(feature = "remote"))]
-        let row_count: u16 = local_rows + 1 + 1; // + sep + Quit
+        let row_count: u16 = local_rows + completions_rows + 1 + 1; // + sep(local→completions) + sep(completions→quit) + Quit
         // Avoid unused-variable noise in the default build.
         #[cfg(not(feature = "remote"))]
         let _ = (remote_exists, server_label);
@@ -199,6 +204,39 @@ impl WelcomeScreen {
                 row += 1;
             }
 
+            // ─── SetupCompletions ─────────────────────────────────
+            let (sc_label, sc_hint): (&str, String) = match completions_status {
+                Some(zz_drop_core::completions::Status::Wired { shell, .. }) => (
+                    "Shell completions",
+                    format!("✓ active for {} · Enter to reinstall", shell.as_str()),
+                ),
+                Some(zz_drop_core::completions::Status::NeedsRcBlock { shell, .. }) => (
+                    "Set up shell completions",
+                    format!("{}: rc file not wired · Enter to fix", shell.as_str()),
+                ),
+                Some(zz_drop_core::completions::Status::Missing { shell, .. }) => (
+                    "Set up shell completions",
+                    format!("{}: not installed · Enter to fix", shell.as_str()),
+                ),
+                None => (
+                    "Set up shell completions",
+                    "$SHELL unsupported · run `zz --setup-completions <shell>` manually".to_string(),
+                ),
+            };
+            nav_item::render_row(
+                menu[row],
+                buf,
+                theme,
+                focused == WelcomeItem::SetupCompletions,
+                sc_label,
+                Some(&sc_hint),
+                false,
+            );
+            row += 1;
+
+            // ─── separator ───────────────────────────────────────
+            row += 1;
+
             // ─── Quit ─────────────────────────────────────────────
             nav_item::render_row(
                 menu[row],
@@ -211,7 +249,15 @@ impl WelcomeScreen {
             );
         }
 
-        // footnote — centred too, to match the tagline
+        // footnote — centred too, to match the tagline.
+        // When a one-shot SetupCompletions message is pending, show
+        // it on a row of its own above the footnote so the operator
+        // sees the outcome inline.
+        if let Some(msg) = completions_message {
+            let banner = Paragraph::new(Line::from(Span::styled(msg.to_string(), theme.cyan())))
+                .alignment(Alignment::Center);
+            ratatui::widgets::Widget::render(banner, chunks[2], buf);
+        }
         let footnote = Paragraph::new(Line::from(vec![
             Span::styled("profiles live in ", theme.dim()),
             Span::styled(config_dir_display.to_string(), theme.cyan()),

@@ -206,6 +206,15 @@ pub struct App {
     /// in that case `Esc` is intentionally a no-op and the only
     /// way to exit is success or `Ctrl-C`.
     pub push_back: Option<Screen>,
+
+    /// Live status of the SACS shell-completion install, surfaced on
+    /// the Welcome screen. Refreshed on Welcome entry and after the
+    /// `SetupCompletions` action runs. `None` means `$SHELL` is
+    /// unset / unsupported and the row is a no-op.
+    pub welcome_completions_status: Option<zz_drop_core::completions::Status>,
+    /// One-shot result message shown below the Welcome menu after a
+    /// `SetupCompletions` action. Cleared on next navigation away.
+    pub welcome_completions_message: Option<String>,
 }
 
 /// Snapshot of a successful `PUT /profiles/{alias}/blob`. Held by
@@ -292,7 +301,7 @@ impl App {
         let mut server_input = TextInput::new();
         // Pre-fill with `https://` so the user just types the host.
         server_input.set_value("https://");
-        Self {
+        let mut app = Self {
             screen: Screen::Welcome,
             should_quit: false,
             state: WizardState::default(),
@@ -383,7 +392,11 @@ impl App {
             delete_inner_request: false,
             test_upload_back: None,
             push_back: None,
-        }
+            welcome_completions_status: None,
+            welcome_completions_message: None,
+        };
+        app.refresh_welcome_completions_status();
+        app
     }
 
     pub fn on_key(&mut self, key: KeyEvent) {
@@ -1264,6 +1277,7 @@ impl App {
                         Some(Screen::Welcome),
                     );
                 }
+                WelcomeItem::SetupCompletions => self.run_setup_completions(),
                 WelcomeItem::Quit => self.should_quit = true,
             },
             _ => {}
@@ -1277,7 +1291,7 @@ impl App {
     /// `ConfigureRemote`, then `SignIn`) — followed by `Quit`.
     /// Up/Down walks through this same order.
     pub fn welcome_items_active(&self) -> Vec<WelcomeItem> {
-        let mut v = Vec::with_capacity(6);
+        let mut v = Vec::with_capacity(7);
         if self.local_exists {
             v.push(WelcomeItem::OpenLocal);
         }
@@ -1293,8 +1307,76 @@ impl App {
             v.push(WelcomeItem::ConfigureRemote);
             v.push(WelcomeItem::SignIn);
         }
+        v.push(WelcomeItem::SetupCompletions);
         v.push(WelcomeItem::Quit);
         v
+    }
+
+    /// Build the InstallRequest from the operator's environment.
+    /// Returns `None` when `$SHELL` is unset / unsupported or HOME
+    /// can't be resolved — the welcome row then refuses to install
+    /// and shows the reason as the status line.
+    fn build_completions_request(
+        shell: zz_drop_core::completions::Shell,
+        script: &'static str,
+    ) -> Option<zz_drop_core::completions::InstallRequest<'static>> {
+        let home = std::env::var_os("HOME").map(std::path::PathBuf::from)?;
+        Some(zz_drop_core::completions::InstallRequest {
+            shell,
+            script,
+            home,
+            xdg_data_home: std::env::var_os("XDG_DATA_HOME").map(std::path::PathBuf::from),
+            zdotdir: std::env::var_os("ZDOTDIR").map(std::path::PathBuf::from),
+            xdg_config_home: std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from),
+        })
+    }
+
+    /// Refresh `welcome_completions_status` from the filesystem.
+    /// Called on entry to the Welcome screen and after a successful
+    /// install. Best-effort: errors collapse to "missing" so the
+    /// menu suggests installing.
+    pub fn refresh_welcome_completions_status(&mut self) {
+        let Some(shell) = zz_drop_core::completions::Shell::detect_from_env() else {
+            self.welcome_completions_status = None;
+            return;
+        };
+        // status() doesn't read the script body, so the empty string
+        // is harmless — it just needs the path-resolution fields.
+        let Some(req) = Self::build_completions_request(shell, "") else {
+            self.welcome_completions_status = None;
+            return;
+        };
+        self.welcome_completions_status = Some(zz_drop_core::completions::status(&req));
+    }
+
+    fn run_setup_completions(&mut self) {
+        let Some(shell) = zz_drop_core::completions::Shell::detect_from_env() else {
+            self.welcome_completions_message =
+                Some("$SHELL unset or unsupported (run `zz --setup-completions <shell>` from a shell).".into());
+            return;
+        };
+        let script = zz_drop_core::completions::scripts::for_shell(shell);
+        let Some(req) = Self::build_completions_request(shell, script) else {
+            self.welcome_completions_message = Some("$HOME unset; can't install.".into());
+            return;
+        };
+        match zz_drop_core::completions::install(&req) {
+            Ok(outcome) => {
+                let mut msg = format!(
+                    "✓ {} completions installed → {}",
+                    outcome.shell.as_str(),
+                    outcome.completion_path.display()
+                );
+                if let Some(hint) = &outcome.hint {
+                    msg.push_str(&format!(" ({hint})"));
+                }
+                self.welcome_completions_message = Some(msg);
+            }
+            Err(e) => {
+                self.welcome_completions_message = Some(format!("install failed: {e}"));
+            }
+        }
+        self.refresh_welcome_completions_status();
     }
 
     fn handle_profile_unlock(&mut self, key: KeyEvent) {
@@ -2735,13 +2817,16 @@ mod tests {
     fn welcome_arrow_down_walks_to_quit_then_enter_quits() {
         let mut app = fresh_no_profile();
         // Fresh menu (remote build): Configure → ConfigureRemote →
-        // SignIn → Quit. Default build collapses to Configure → Quit
-        // and is covered by the sibling test below.
+        // SignIn → SetupCompletions → Quit. Default build collapses
+        // to Configure → SetupCompletions → Quit and is covered by
+        // the sibling test below.
         assert_eq!(app.welcome_item, WelcomeItem::Configure);
         app.on_key(key(KeyCode::Down));
         assert_eq!(app.welcome_item, WelcomeItem::ConfigureRemote);
         app.on_key(key(KeyCode::Down));
         assert_eq!(app.welcome_item, WelcomeItem::SignIn);
+        app.on_key(key(KeyCode::Down));
+        assert_eq!(app.welcome_item, WelcomeItem::SetupCompletions);
         app.on_key(key(KeyCode::Down));
         assert_eq!(app.welcome_item, WelcomeItem::Quit);
         app.on_key(key(KeyCode::Enter));
@@ -2752,9 +2837,11 @@ mod tests {
     #[cfg(not(feature = "remote"))]
     #[test]
     fn welcome_arrow_down_walks_to_quit_then_enter_quits_local_only() {
-        // Default-build menu collapses to Configure → Quit only.
+        // Default-build menu: Configure → SetupCompletions → Quit.
         let mut app = fresh_no_profile();
         assert_eq!(app.welcome_item, WelcomeItem::Configure);
+        app.on_key(key(KeyCode::Down));
+        assert_eq!(app.welcome_item, WelcomeItem::SetupCompletions);
         app.on_key(key(KeyCode::Down));
         assert_eq!(app.welcome_item, WelcomeItem::Quit);
         app.on_key(key(KeyCode::Enter));

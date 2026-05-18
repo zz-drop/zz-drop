@@ -215,6 +215,163 @@ pub fn emit_doctor_check(name: &str, ok: bool, detail: Option<&str>) {
     }
 }
 
+/// Result of one `--setup-completions` invocation.
+pub fn emit_completions_setup(outcome: &zz_drop_core::completions::InstallOutcome) {
+    use zz_drop_core::completions::{FileAction, RcAction};
+
+    let shell = outcome.shell.as_str();
+    let completion_action = match outcome.completion_action {
+        FileAction::Created => "created",
+        FileAction::Updated => "updated",
+        FileAction::Unchanged => "unchanged",
+    };
+    let rc_action = match outcome.rc_action {
+        RcAction::Inserted => "inserted",
+        RcAction::Updated => "updated",
+        RcAction::Unchanged => "unchanged",
+        RcAction::NotNeeded => "not_needed",
+    };
+    let completion_path = outcome.completion_path.display().to_string();
+    let rc_path_owned = outcome.rc_path.as_ref().map(|p| p.display().to_string());
+    let framework = outcome.framework.as_str();
+
+    match runtime::flags().output {
+        OutputMode::Text => {
+            line(&format!(
+                "shell completion · {shell}\n  file  {completion_action:<9} {completion_path}"
+            ));
+            if let Some(rc) = &rc_path_owned {
+                line(&format!("  rc    {rc_action:<9} {rc}"));
+            }
+            if outcome.framework.is_some() {
+                line(&format!("  framework detected: {framework}"));
+            }
+            if let Some(h) = &outcome.hint {
+                line(&format!("→ {h}"));
+            }
+        }
+        OutputMode::Quiet => {
+            // One compact line: `bash:created+inserted` or
+            // `fish:unchanged+not_needed`.
+            line(&format!("{shell}:{completion_action}+{rc_action}"));
+        }
+        OutputMode::Json => write_json_line(&jsonev::CompletionsSetup::new(
+            shell_static(outcome.shell),
+            &completion_path,
+            file_action_static(outcome.completion_action),
+            rc_path_owned.as_deref(),
+            rc_action_static(outcome.rc_action),
+            framework_static(outcome.framework),
+            outcome.hint.as_deref(),
+        )),
+    }
+}
+
+/// Result of `--check-completions`.
+pub fn emit_completions_status(status: &zz_drop_core::completions::Status) {
+    use zz_drop_core::completions::Status as S;
+
+    let shell = status.shell();
+    let (status_label, completion_path, rc_path): (&'static str, String, Option<String>) =
+        match status {
+            S::Wired {
+                completion_path,
+                rc_path,
+                ..
+            } => (
+                "wired",
+                completion_path.display().to_string(),
+                rc_path.as_ref().map(|p| p.display().to_string()),
+            ),
+            S::NeedsRcBlock {
+                completion_path,
+                rc_path,
+                ..
+            } => (
+                "needs_rc_block",
+                completion_path.display().to_string(),
+                Some(rc_path.display().to_string()),
+            ),
+            S::Missing {
+                completion_path, ..
+            } => (
+                "missing",
+                completion_path.display().to_string(),
+                None,
+            ),
+        };
+    let wired = status.is_wired();
+
+    match runtime::flags().output {
+        OutputMode::Text => {
+            line(&format!(
+                "shell completion · {shell} — {status_label}",
+                shell = shell.as_str()
+            ));
+            line(&format!("  file  {completion_path}"));
+            if let Some(rc) = &rc_path {
+                line(&format!("  rc    {rc}"));
+            }
+            if !wired {
+                line("→ run `zz --setup-completions` to fix.");
+            }
+        }
+        OutputMode::Quiet => {
+            line(&format!("{}:{status_label}", shell.as_str()));
+        }
+        OutputMode::Json => write_json_line(&jsonev::CompletionsStatus::new(
+            shell_static(shell),
+            wired,
+            status_label,
+            &completion_path,
+            rc_path.as_deref(),
+        )),
+    }
+}
+
+fn shell_static(s: zz_drop_core::completions::Shell) -> &'static str {
+    use zz_drop_core::completions::Shell;
+    match s {
+        Shell::Bash => "bash",
+        Shell::Zsh => "zsh",
+        Shell::Fish => "fish",
+    }
+}
+
+fn file_action_static(a: zz_drop_core::completions::FileAction) -> &'static str {
+    use zz_drop_core::completions::FileAction;
+    match a {
+        FileAction::Created => "created",
+        FileAction::Updated => "updated",
+        FileAction::Unchanged => "unchanged",
+    }
+}
+
+fn rc_action_static(a: zz_drop_core::completions::RcAction) -> &'static str {
+    use zz_drop_core::completions::RcAction;
+    match a {
+        RcAction::Inserted => "inserted",
+        RcAction::Updated => "updated",
+        RcAction::Unchanged => "unchanged",
+        RcAction::NotNeeded => "not_needed",
+    }
+}
+
+fn framework_static(f: zz_drop_core::completions::Framework) -> &'static str {
+    use zz_drop_core::completions::Framework;
+    match f {
+        Framework::None => "none",
+        Framework::OhMyZsh => "oh-my-zsh",
+        Framework::Prezto => "prezto",
+        Framework::Zinit => "zinit",
+        Framework::Antibody => "antibody",
+        Framework::Antidote => "antidote",
+        Framework::Znap => "znap",
+        Framework::Zimfw => "zimfw",
+        Framework::Zplug => "zplug",
+    }
+}
+
 /// Final `zz f` summary.
 pub fn emit_doctor_summary(ok: bool, failed: Vec<&str>) {
     match runtime::flags().output {

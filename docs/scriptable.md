@@ -223,6 +223,40 @@ the schema version):
 `container_local` returning `false` because the operator hasn't
 run `zz c` yet) don't enter `failed`.
 
+### `completions_setup` / `completions_status`
+
+`zz --setup-completions` emits a single `completions_setup`
+record describing what changed (or didn't). `zz --check-completions`
+emits a single `completions_status` record describing the state
+on disk.
+
+```jsonc
+{"v":"1","event":"completions_setup","ts":"...",
+ "shell":"zsh","completion_path":"/home/u/.zfunc/_zz",
+ "completion_action":"created",
+ "rc_path":"/home/u/.zshrc","rc_action":"inserted",
+ "framework":"none",
+ "hint":"open a new terminal (or run `exec zsh -l`) ..."}
+
+{"v":"1","event":"completions_status","ts":"...",
+ "shell":"zsh","wired":true,"status":"wired",
+ "completion_path":"/home/u/.zfunc/_zz",
+ "rc_path":"/home/u/.zshrc"}
+```
+
+Field values are closed enums:
+
+- `shell`: `"bash" | "zsh" | "fish"`
+- `completion_action`: `"created" | "updated" | "unchanged"`
+- `rc_action`: `"inserted" | "updated" | "unchanged" | "not_needed"`
+- `framework`: `"none" | "oh-my-zsh" | "prezto" | "zinit" | "antibody" | "antidote" | "znap" | "zimfw" | "zplug"`
+- `status` (check only): `"wired" | "needs_rc_block" | "missing"`
+
+Exit codes: `0` when `wired` (or setup succeeded), `2` for usage
+errors (unknown shell, missing positional with `$SHELL` unset),
+`12` (`EXIT_COMPLETIONS_FAILED`) when the filesystem write fails
+or `--check-completions` reports anything other than `wired`.
+
 ---
 
 ## Reason codes (1:1 with exit codes)
@@ -245,6 +279,7 @@ enum. Each value maps to exactly one process exit code.
 | `interactive_only` | 2 | Command is a TUI / wizard (`zz c`, setup) and has no scriptable surface. |
 | `alias_ambiguous` | 2 | Multiple aliases in the container and no `--alias` / `ZZ_ALIAS` / cached default. |
 | `container_ambiguous` | 2 | Both `local` and `remote` containers exist; no `--local` / `--remote` / `ZZ_CONTAINER` provided. |
+| `completions_install_failed` | 12 | `--setup-completions` couldn't write the completion file or the rc-file block (permission denied, disk full, read-only filesystem). |
 
 Exit codes are stable from 1.0.0 onward. New codes can be
 *added* (additive, doesn't bump the schema). Removals or

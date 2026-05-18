@@ -372,6 +372,95 @@ impl<'a> DoctorSummary<'a> {
     }
 }
 
+/// Outcome of one `--setup-completions` invocation. Serializes to
+/// a single record with the shell + filesystem state that resulted.
+#[derive(Debug, Serialize)]
+pub struct CompletionsSetup<'a> {
+    pub v: &'static str,
+    pub event: &'static str,
+    pub ts: String,
+    pub shell: &'static str,
+    pub completion_path: &'a str,
+    /// `"created" | "updated" | "unchanged"` — what happened to the
+    /// completion script file on disk.
+    pub completion_action: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rc_path: Option<&'a str>,
+    /// `"inserted" | "updated" | "unchanged" | "not_needed"` — what
+    /// happened to the rc-file block. `not_needed` means the shell
+    /// doesn't require an rc edit (fish, or bash with the
+    /// bash-completion framework already loaded).
+    pub rc_action: &'static str,
+    /// `"none"` or one of the known zsh framework names (`oh-my-zsh`,
+    /// `prezto`, `zinit`, …). Only meaningful for `shell == "zsh"`.
+    pub framework: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<&'a str>,
+}
+
+impl<'a> CompletionsSetup<'a> {
+    pub fn new(
+        shell: &'static str,
+        completion_path: &'a str,
+        completion_action: &'static str,
+        rc_path: Option<&'a str>,
+        rc_action: &'static str,
+        framework: &'static str,
+        hint: Option<&'a str>,
+    ) -> Self {
+        Self {
+            v: SCHEMA_V,
+            event: "completions_setup",
+            ts: now_rfc3339(),
+            shell,
+            completion_path,
+            completion_action,
+            rc_path,
+            rc_action,
+            framework,
+            hint,
+        }
+    }
+}
+
+/// Outcome of `--check-completions`: read-only status report.
+#[derive(Debug, Serialize)]
+pub struct CompletionsStatus<'a> {
+    pub v: &'static str,
+    pub event: &'static str,
+    pub ts: String,
+    pub shell: &'static str,
+    /// `true` when SACS will load in a fresh shell session.
+    pub wired: bool,
+    /// `"wired" | "needs_rc_block" | "missing"` — same triage as
+    /// the [`crate::completions::Status`] enum.
+    pub status: &'static str,
+    pub completion_path: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rc_path: Option<&'a str>,
+}
+
+impl<'a> CompletionsStatus<'a> {
+    pub fn new(
+        shell: &'static str,
+        wired: bool,
+        status: &'static str,
+        completion_path: &'a str,
+        rc_path: Option<&'a str>,
+    ) -> Self {
+        Self {
+            v: SCHEMA_V,
+            event: "completions_status",
+            ts: now_rfc3339(),
+            shell,
+            wired,
+            status,
+            completion_path,
+            rc_path,
+        }
+    }
+}
+
 /// Serialize an event into a single NDJSON line **without** the
 /// trailing newline. Callers append `\n` themselves before writing
 /// to stdout — keeps the function pure for testing and lets the

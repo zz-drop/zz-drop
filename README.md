@@ -117,14 +117,20 @@ select, filename colors) is opt-in via six lines in `~/.zshrc`,
 scoped to `zz` only so it leaves `git`, `ls`, `cd`'s TAB
 behaviour untouched.
 
-Brew install handles this for you. Manual install (other paths,
-or to override):
+Brew and the curl-installer wire SACS automatically. For any
+other install path — or to verify / fix a stale setup — run:
 
 ```bash
-zz --completions bash | source
-zz --completions zsh  > ~/.zfunc/_zz       # then `compinit`
-zz --completions fish > ~/.config/fish/completions/zz.fish
+zz --setup-completions          # auto-detects $SHELL, writes file + rc block
+zz --check-completions          # report status without touching anything
+zz --setup-completions --uninstall  # remove cleanly
 ```
+
+The setup writes a single delimited block to `~/.zshrc` /
+`~/.bashrc` (between `# >>> zz-drop SACS >>>` and
+`# <<< zz-drop SACS <<<`) and is framework-aware (oh-my-zsh,
+prezto, zinit, antibody, antidote, znap, zimfw, zplug — when one
+is detected, `compinit` is left to the framework).
 
 Full installation guide, zsh styling block and the
 download-glob wrapper for `zz d 'Q*'`:

@@ -89,6 +89,10 @@ pub enum WelcomeItem {
     /// account's aliases, pick one and download the encrypted blob
     /// into `profile-remote.zz`. Always visible.
     SignIn,
+    /// One-shot install of shell completions for the current shell
+    /// (`$SHELL` detection). Always visible; the row label changes
+    /// to reflect the live status (`✓ active` vs `not wired`).
+    SetupCompletions,
     Quit,
 }
 

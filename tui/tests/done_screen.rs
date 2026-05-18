@@ -58,26 +58,19 @@ fn done_screen_lists_the_daily_cli_recap() {
 }
 
 #[test]
-fn done_screen_offers_shell_completion_install_lines() {
+fn done_screen_points_at_setup_completions_when_tab_is_silent() {
     let s = render_local_only_done();
-    // The three one-liners must surface verbatim so the
-    // operator can copy-paste them; matching on the verb +
-    // shell name guards against any future restyling.
+    // The done screen no longer enumerates per-shell install
+    // one-liners — brew and curl|sh already wire them, and
+    // operators in other paths get a single command pointer.
     assert!(
-        s.contains("zz --completions bash"),
-        "missing bash install line:\n{s}"
+        s.contains("zz --setup-completions"),
+        "missing setup-completions hint:\n{s}"
     );
     assert!(
-        s.contains("zz --completions zsh"),
-        "missing zsh install line:\n{s}"
+        s.contains("zz <TAB>"),
+        "missing fallback trigger line:\n{s}"
     );
-    assert!(
-        s.contains("zz --completions fish"),
-        "missing fish install line:\n{s}"
-    );
-    // The section is labelled "optional" so the operator
-    // understands it isn't required to finish setup.
-    assert!(s.contains("optional"), "completion section not flagged optional:\n{s}");
 }
 
 #[test]

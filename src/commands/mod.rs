@@ -49,6 +49,10 @@ pub const EXIT_AGENT_LOCKED: i32 = 10;
 /// whose mode is > 0600 or whose owner differs from the current
 /// UID. Refuses to read the file at all.
 pub const EXIT_PASSPHRASE_FILE_INSECURE: i32 = 11;
+/// `--setup-completions` couldn't write the completion file or the
+/// rc-file block (permission denied, disk full, read-only fs).
+/// Maps to [`zz_drop_core::scriptable::Reason::CompletionsInstallFailed`].
+pub const EXIT_COMPLETIONS_FAILED: i32 = 12;
 
 pub fn dispatch(cmd: &Command) -> i32 {
     match cmd {

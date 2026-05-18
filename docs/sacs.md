@@ -9,47 +9,101 @@ suggestions, the script never changes.
 
 ## Installation
 
-Both supported install paths wire completions automatically — no
-manual `--completions` step required.
+Both supported install paths wire completions automatically.
+For everyone else — `cargo install --git`, build-from-source,
+or to fix a setup that didn't quite take — the single command
+`zz --setup-completions` does the same thing.
 
-- **Homebrew** (`brew install zz-drop/zz-drop/zz-drop`) — installs
-  completions for bash / zsh / fish into the standard cellar
-  paths (`share/{bash-completion/completions,zsh/site-functions,
-  fish/vendor_completions.d}`). `brew uninstall` reverses them.
-- **`curl | sh` installer** — writes the bash completion file to
-  `${XDG_DATA_HOME:-~/.local/share}/bash-completion/completions/zz-drop`
-  **unconditionally**, regardless of `$SHELL`. bash is dominant on
-  Linux / WSL and the XDG path is harmless for non-bash users, so
-  containers, cron jobs and SSH non-login sessions (where `$SHELL`
-  is often unset) get SACS without a manual wiring step. If the
-  bash-completion framework isn't detected on the system, the
-  installer prints the one-line fix (`apt / dnf / pacman / apk
-  install bash-completion`, or source the file directly).
+### The one-shot command
 
-  zsh and fish completion files are installed only when `$SHELL`
-  points at the matching shell — their target paths depend on
-  user dotfile config (`ZDOTDIR`, fish completions dir), so
-  dropping the file for users who don't run that shell would
-  land it in an unexpected place.
+```sh
+zz --setup-completions              # auto-detect $SHELL
+zz --setup-completions zsh          # force a specific shell
+zz --check-completions              # read-only status report
+zz --setup-completions --uninstall  # remove cleanly
+```
 
-The auto-installed paths per shell:
+What `--setup-completions` does, end-to-end:
+
+1. Detect the shell (`$SHELL`, or the explicit positional).
+2. Write the completion script file to the canonical XDG path
+   (table below). Idempotent — re-running with the same content
+   is a no-op; changed content is overwritten.
+3. For zsh / bash, append (or update) a single delimited block in
+   `~/.zshrc` / `~/.bashrc`:
+
+   ```
+   # >>> zz-drop SACS >>>
+   # Added by `zz --setup-completions` — to remove, delete this block.
+   fpath=("$HOME/.zfunc" $fpath)
+   autoload -U compinit && compinit -i
+   # <<< zz-drop SACS <<<
+   ```
+
+   Framework-aware: if `oh-my-zsh`, `prezto`, `zinit`, `antibody`,
+   `antidote`, `znap`, `zimfw` or `zplug` is referenced in the rc
+   file, the block contains only the `fpath` line — the framework
+   owns `compinit`.
+
+4. For fish, no rc edit is needed — fish auto-loads everything
+   under `~/.config/fish/completions/`.
+
+The two marker lines (`# >>> zz-drop SACS >>>` /
+`# <<< zz-drop SACS <<<`) are stable across versions, so a future
+`zz --setup-completions --uninstall` can find and remove the block
+even if it was written by an older binary.
+
+### Where files land
 
 | Shell | Path |
 |---|---|
 | bash | `${XDG_DATA_HOME:-~/.local/share}/bash-completion/completions/zz-drop` |
 | zsh  | `${ZDOTDIR:-~}/.zfunc/_zz` |
-| fish | `~/.config/fish/completions/zz.fish` |
-
-For build-from-source or any other path, manual install:
-
-```sh
-zz --completions bash | source                                  # bash
-zz --completions zsh  > ~/.zfunc/_zz                            # zsh (then `autoload -U compinit && compinit`)
-zz --completions fish > ~/.config/fish/completions/zz.fish      # fish
-```
+| fish | `${XDG_CONFIG_HOME:-~/.config}/fish/completions/zz.fish` |
 
 Each script registers completion for both `zz` and `zz-drop` so it
 works the same regardless of which name the operator invokes.
+
+### Install-path matrix
+
+- **Homebrew** (`brew install zz-drop/zz-drop/zz-drop`) — installs
+  completion files into the standard cellar paths
+  (`share/{bash-completion/completions,zsh/site-functions,
+  fish/vendor_completions.d}`); `brew uninstall` reverses them.
+  Brew, by policy, does not touch dotfiles. On Apple Silicon the
+  cellar path isn't in zsh's default `fpath`, and a fresh macOS
+  `.zshrc` typically doesn't call `compinit`, so the formula's
+  `caveats` block points the operator at the two one-liners they
+  need to add (`brew shellenv` + `autoload compinit`). Operators
+  who'd rather have a delimited block written for them can run
+  `zz --setup-completions` after install.
+- **`curl | sh` installer** — drops binaries, then invokes
+  `zz --setup-completions <shell>` so file + rc block land in one
+  step. Bash is wired unconditionally regardless of `$SHELL`
+  (containers, cron jobs and SSH non-login sessions often have
+  `$SHELL` unset). zsh / fish wiring still gates on `$SHELL`
+  pointing at the matching shell — target paths depend on user
+  dotfile config (`ZDOTDIR`, fish completions dir), so dropping
+  the file for users who don't run that shell would land it in
+  an unexpected place.
+- **`cargo install --git`** — no post-install hook fires, so run
+  `zz --setup-completions` manually once.
+
+### Scriptable mode
+
+Both flags support `--json` and `--quiet`:
+
+```sh
+zz --setup-completions --json
+# {"v":"1","event":"completions_setup","ts":"...","shell":"zsh", …}
+
+zz --check-completions --quiet
+# zsh:wired
+```
+
+Exit codes: `0` on success, `2` for usage errors, `12`
+(`EXIT_COMPLETIONS_FAILED`) when the filesystem write fails or the
+status check reports anything other than `wired`.
 
 ## zsh styling (built-in, override-friendly)
 
@@ -155,7 +209,7 @@ match the pattern, or `shopt -s failglob` is set — by always
 disabling the local glob for download verbs:
 
 ```bash
-# In ~/.bashrc, after `eval "$(zz --completions bash)"`.
+# In ~/.bashrc, anywhere after the `zz --setup-completions` block.
 zz() {
     case "$1" in
         d|d[a-z]*)

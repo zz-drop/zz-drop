@@ -18,7 +18,7 @@ command -v zz >/dev/null 2>&1 \
     && echo "note: 'zz' already on PATH at $(command -v zz); short alias not installed" \
     || ln -sf "$HOME/.local/bin/zz-drop" "$HOME/.local/bin/zz"
 
-mkdir -p ~/.zfunc && zz --completions zsh > ~/.zfunc/_zz   # see docs/sacs.md for the rc block
+zz --setup-completions   # auto-detect $SHELL, install file + idempotent rc block
 ```
 
 Verify: `zz --help`, `zz f`.
@@ -105,15 +105,19 @@ suggestions. Full setup, scoping rules and styling are in
 [`docs/sacs.md`](./sacs.md). Bare-minimum install:
 
 ```sh
-mkdir -p ~/.zfunc && zz --completions zsh > ~/.zfunc/_zz                    # zsh
-zz --completions bash > ~/.local/share/bash-completion/completions/zz       # bash
-zz --completions fish > ~/.config/fish/completions/zz.fish                  # fish
+zz --setup-completions              # auto-detect $SHELL
+zz --setup-completions zsh          # or force a specific shell
+zz --check-completions              # read-only status report
 ```
 
-Then add the recommended rc block from
-[`docs/sacs.md`](./sacs.md) (zsh styling, scoped to `zz` only —
-no global TAB rebind). The download-glob wrapper (`zz d 'Q*'`
-without quotes) is in the same doc.
+The command writes the completion file to its canonical XDG
+path and appends a single delimited block (`# >>> zz-drop SACS
+>>>` … `# <<< zz-drop SACS <<<`) to the rc file. Framework-aware
+(oh-my-zsh, prezto, zinit, antibody, antidote, znap, zimfw,
+zplug). The block is removable with
+`zz --setup-completions --uninstall`. Optional zsh styling and
+the download-glob wrapper (`zz d 'Q*'` without quotes) are in
+[`docs/sacs.md`](./sacs.md).
 
 ## Verify
 
@@ -195,7 +199,7 @@ cd "$(dirname "$(readlink -f "$(command -v zz-drop)")")/../.."   # walk back to 
 git pull --ff-only
 cargo build --release --workspace
 
-zz --completions zsh > ~/.zfunc/_zz
+zz --setup-completions   # refresh the installed script (no-op if unchanged)
 rm -f ~/.zcompdump*
 ```
 
@@ -204,11 +208,8 @@ Symlinks already point at the rebuilt binaries.
 ## Uninstall
 
 ```sh
+zz --setup-completions --uninstall   # remove file + delimited rc block
 rm -f "$HOME/.local/bin/"{zz,zz-drop,zz-tui}
-rm -f ~/.zfunc/_zz
-rm -f ~/.local/share/bash-completion/completions/zz
-rm -f ~/.config/fish/completions/zz.fish
-# Then remove the zsh block you added to ~/.zshrc by hand.
 # Source: rm -rf path/to/your/zz-drop/clone
 ```
 
@@ -219,7 +220,7 @@ rm -f ~/.config/fish/completions/zz.fish
 | `cargo: command not found`                         | Rust not installed                                          | [rustup.rs](https://rustup.rs/), open new shell                                      |
 | `error: linker 'cc' not found` (Linux)             | C toolchain / OpenSSL headers missing                       | `apt install build-essential pkg-config libssl-dev` (or distro equivalent)           |
 | `zz: command not found` after install              | `~/.local/bin` not on `$PATH`                               | See "`~/.local/bin` on PATH" above                                                   |
-| `zz <TAB>` shows nothing                           | Completion script not loaded                                | zsh: ensure `fpath` includes `~/.zfunc` and `compinit` ran                           |
+| `zz <TAB>` shows nothing                           | Completion script not loaded                                | Run `zz --setup-completions` (and `zz --check-completions` to diagnose)              |
 | `zz <TAB>` lists but arrows do nothing             | `menu-select` widget not registered (stock macOS zsh)       | Add `zle -C menu-select .menu-select _main_complete` — see [`sacs.md`](./sacs.md)    |
 | `zsh: no matches found: Q*` on `zz d Q*`           | zsh's local glob aborts before the binary                   | Quote (`zz d 'Q*'`) or install the `zz()` wrapper — see [`sacs.md`](./sacs.md)       |
 | `zz c` says tui binary not found                   | `zz-tui` not built / not on PATH                            | Build the workspace and symlink `zz-tui` into `~/.local/bin/`                        |

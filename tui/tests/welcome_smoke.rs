@@ -34,6 +34,8 @@ fn welcome_default_state_renders_content() {
         "zz-drop.net",
         false,
         false,
+        None,
+        None,
     );
     let s = flatten(&buf);
     assert!(s.contains("zz-drop"), "missing tagline:\n{s}");
@@ -65,6 +67,8 @@ fn welcome_with_existing_local_container_renders_open_row() {
         "zz-drop.net",
         true,
         false,
+        None,
+        None,
     );
     let s = flatten(&buf);
     assert!(s.contains("Open local container"), "{s}");

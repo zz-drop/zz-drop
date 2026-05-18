@@ -154,29 +154,17 @@ impl DoneScreen {
             Span::styled("          # lock", theme.dim()),
         ]));
         lines.push(Line::from(""));
-        // Optional one-off: install shell completion. Hint
-        // shown verbatim so the operator can copy-paste; we
-        // intentionally don't auto-write or shell-out from the
-        // TUI ("mano sinistra": no extra prompts, no surprises).
-        lines.push(Line::styled(
-            "  optional · shell completion (one-off):",
-            theme.dim_bright(),
-        ));
-        lines.push(Line::from(""));
+        // Shell completions are wired automatically by brew and the
+        // curl|sh installer. If `zz <TAB>` doesn't show candidates
+        // after this setup, run `zz --setup-completions` once — it
+        // detects the shell, writes the file, and appends an
+        // idempotent block to the rc file.
         lines.push(Line::from(vec![
-            Span::styled("    zz --completions bash | source", theme.cyan()),
-            Span::styled("                         # bash", theme.dim()),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("    zz --completions zsh  > ~/.zfunc/_zz", theme.cyan()),
-            Span::styled("                # zsh", theme.dim()),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled(
-                "    zz --completions fish > ~/.config/fish/completions/zz.fish",
-                theme.cyan(),
-            ),
-            Span::styled(" # fish", theme.dim()),
+            Span::styled("  shell completion:", theme.dim_bright()),
+            Span::styled("  if ", theme.dim()),
+            Span::styled("zz <TAB>", theme.cyan()),
+            Span::styled(" shows nothing, run ", theme.dim()),
+            Span::styled("zz --setup-completions", theme.cyan()),
         ]));
         lines.push(Line::from(""));
         lines.push(Line::from(vec![

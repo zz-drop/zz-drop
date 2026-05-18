@@ -73,6 +73,12 @@ pub enum Reason {
     /// `--local` / `--remote` / `ZZ_CONTAINER` was supplied. Maps
     /// to `EXIT_USAGE`.
     ContainerAmbiguous,
+    /// `--setup-completions` couldn't write the completion file
+    /// or the rc-file block (permission denied, disk full,
+    /// read-only filesystem). The `detail` field carries the
+    /// underlying I/O error message. Maps to a new
+    /// `EXIT_COMPLETIONS_FAILED`.
+    CompletionsInstallFailed,
 }
 
 impl Reason {
@@ -93,6 +99,7 @@ impl Reason {
             Self::InteractiveOnly => "interactive_only",
             Self::AliasAmbiguous => "alias_ambiguous",
             Self::ContainerAmbiguous => "container_ambiguous",
+            Self::CompletionsInstallFailed => "completions_install_failed",
         }
     }
 }
@@ -136,6 +143,7 @@ mod tests {
             Reason::InteractiveOnly,
             Reason::AliasAmbiguous,
             Reason::ContainerAmbiguous,
+            Reason::CompletionsInstallFailed,
         ] {
             let quoted = format!("\"{}\"", r.as_str());
             assert_eq!(serde_json::to_string(&r).unwrap(), quoted, "reason={r:?}");

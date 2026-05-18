@@ -13,6 +13,83 @@ surfaces frozen on the road to 1.0 are listed in
 
 ## [Unreleased]
 
+## [0.9.3] — 2026-05-18
+
+Unified shell-completion install path. One command everywhere
+(`zz --setup-completions`), one source of truth in
+`zz_drop_core::completions`, one delimited block (`# >>> zz-drop
+SACS >>>` … `# <<< zz-drop SACS <<<`) in the rc file. Closes the
+fragmentation that left brew users with the file installed but
+the shell unable to find it, and the TUI's done-screen with
+copy-paste hints that lied to 99% of operators.
+
+### Added
+
+- **`zz --setup-completions [bash|zsh|fish]`** — auto-detects
+  `$SHELL`, writes the completion script to its canonical XDG
+  path, and appends an idempotent delimited block to `~/.zshrc`
+  or `~/.bashrc`. Framework-aware (oh-my-zsh, prezto, zinit,
+  antibody, antidote, znap, zimfw, zplug — when a framework is
+  detected, `compinit` is left to it). `--uninstall` reverses
+  everything cleanly. Idempotent: re-running with identical
+  content is a no-op; changed script content updates in place.
+- **`zz --check-completions [bash|zsh|fish]`** — read-only
+  status report: `wired` / `needs_rc_block` / `missing`. Exits
+  0 when wired, 12 (`EXIT_COMPLETIONS_FAILED`) otherwise.
+- **`completions_setup` and `completions_status` NDJSON events**
+  with closed-enum fields for `shell`, `framework`,
+  `completion_action`, `rc_action`, `status`. Full schema in
+  [`docs/scriptable.md`](docs/scriptable.md) +
+  [`docs/scriptable/zz-drop-output.v1.json`](docs/scriptable/zz-drop-output.v1.json).
+- **`Reason::CompletionsInstallFailed`** (serialised as
+  `completions_install_failed`) for I/O failures.
+- **`EXIT_COMPLETIONS_FAILED = 12`** — new exit code (additive,
+  doesn't bump the schema).
+- **TUI welcome screen: Shell completions row** — shows live
+  status (`✓ active`, `not wired`, `not installed`) for the
+  detected shell. Enter installs / reinstalls.
+- **Stable block markers** — the `# >>> zz-drop SACS >>>` and
+  `# <<< zz-drop SACS <<<` strings are now part of the v1
+  public surface so older blocks remain recognisable for
+  update / uninstall across versions.
+
+### Changed
+
+- **Brew formula `def caveats`** — patched in by
+  `patch-formula.yml`. Tells the operator the two one-liners
+  they need (`brew shellenv` + `autoload compinit`) for the
+  cellar-installed completions to actually load on Apple
+  Silicon, and points at `zz --setup-completions` for the
+  one-shot equivalent.
+- **`curl | sh` installer** — the post-install completion hook
+  shrinks from ~130 lines of POSIX sh to ~10. The wiring logic
+  (shell detection, framework detection, idempotent rc block)
+  now lives in `zz_drop_core::completions` and is shared with
+  the TUI and the new CLI flags.
+- **TUI "done" screen** — replaces ~20 lines of stale per-shell
+  copy-paste hints with a single line pointing at
+  `zz --setup-completions` for operators who installed via
+  paths that don't auto-wire (cargo install, source build).
+- **`docs/sacs.md` Installation section** — rewritten around
+  `zz --setup-completions`. README + `docs/build.md` similarly
+  updated.
+
+### Internal
+
+- Crates bumped from `0.9.2` to `0.9.3`.
+- New module `zz-drop-core::completions` with public types
+  `Shell`, `Framework`, `Status`, `InstallRequest`,
+  `InstallOutcome`, `FileAction`, `RcAction`, plus
+  `install()`, `status()`, `uninstall()` and the rc-block
+  primitives. Tests cover idempotency, framework detection,
+  install/uninstall round-trip preserving surrounding rc lines,
+  and the path-resolution matrix across `$XDG_*` overrides.
+- SACS shell script templates (`bash.sh`, `zsh.sh`,
+  `fish.fish`) moved from `src/sacs/scripts/` to
+  `core/src/completions/scripts/` so the TUI can install them
+  without duplication. The root crate's `src/sacs/scripts/mod.rs`
+  is now a thin re-export.
+
 ## [0.9.2] — 2026-05-17
 
 Polish release ahead of the 1.0 freeze. No new public surface,

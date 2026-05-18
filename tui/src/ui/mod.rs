@@ -122,6 +122,8 @@ pub fn draw(frame: &mut Frame<'_>, app: &mut App, theme: &Theme) {
                 &server_label,
                 app.local_exists,
                 app.remote_exists,
+                app.welcome_completions_status.as_ref(),
+                app.welcome_completions_message.as_deref(),
             ),
             Screen::Provider => {
                 ProviderScreen::render(rects.body, buf, theme, app.state.provider_kind)

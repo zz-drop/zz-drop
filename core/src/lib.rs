@@ -3,6 +3,7 @@
 
 pub mod agent_proto;
 pub mod api;
+pub mod completions;
 pub mod config;
 pub mod crypto;
 pub mod diag_log;
